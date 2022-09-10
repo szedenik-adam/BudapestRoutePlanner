@@ -1,0 +1,37 @@
+<!DOCTYPE html> 
+<html style="margin:0px;"> 
+<head>
+	<title>Budapest Route Planner</title>
+	<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no' />
+	<style>
+		body { margin: 0; padding: 0; }
+		#map { position: absolute; top: 0; bottom: 0; width: 100%; height: 100vh; }
+	</style>
+	<script src='scripts/maplibre-gl/maplibre-gl.js'></script>
+	<link href='scripts/maplibre-gl/maplibre-gl.css' rel='stylesheet' />
+	<script type="text/javascript" charset="utf-8" src="scripts/external/turf.min.js"></script>
+	<script type="text/javascript" charset="utf-8" src="scripts/external/jszip.min.js"></script>
+	<script type="text/javascript" charset="utf-8" src="scripts/gtfs.js"></script>
+	<script type="text/javascript" charset="utf-8" src="scripts/style.js"></script>
+	<script type="text/javascript" charset="utf-8" src="scripts/local.js"></script>
+	<script>
+		var map;
+		var gtfs, gtfsRoutes;
+
+		function onLoad()
+		{
+            var map = new maplibregl.Map({
+                container: 'map',
+                style: style,
+                center: [19.06086, 47.52918],
+                zoom: 15,
+                hash: true
+			});
+			map.addControl(new maplibregl.NavigationControl());
+		}
+	</script>
+</head>
+	<body onload="onLoad();"> 
+		<div id="map"></div>
+	</body>
+</html>

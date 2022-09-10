@@ -1,0 +1,8 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/budapest
+/2017-07-03_hungary_budapest.mbtiles
+/budapest_gtfs.zip
+/scripts/local.js
