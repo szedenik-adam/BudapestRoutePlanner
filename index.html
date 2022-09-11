@@ -3,10 +3,7 @@
 <head>
 	<title>Budapest Route Planner</title>
 	<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no' />
-	<style>
-		body { margin: 0; padding: 0; }
-		#map { position: absolute; top: 0; bottom: 0; width: 100%; height: 100vh; }
-	</style>
+	<link rel="stylesheet" href="style/style.css">
 	<script src='scripts/maplibre-gl/maplibre-gl.js'></script>
 	<link href='scripts/maplibre-gl/maplibre-gl.css' rel='stylesheet' />
 	<script type="text/javascript" charset="utf-8" src="scripts/external/turf.min.js"></script>
@@ -20,18 +17,48 @@
 
 		function onLoad()
 		{
-            var map = new maplibregl.Map({
-                container: 'map',
-                style: style,
-                center: [19.06086, 47.52918],
-                zoom: 15,
-                hash: true
+			map = new maplibregl.Map({
+				container: 'map',
+				style: style,
+				center: [19.06086, 47.52918],
+				zoom: 15,
+				hash: true
 			});
+			map.addControl(new maplibregl.FullscreenControl({ container: document.querySelector('body') }));
 			map.addControl(new maplibregl.NavigationControl());
+			map.addControl(new maplibregl.GeolocateControl({
+				positionOptions: { enableHighAccuracy: true },
+				trackUserLocation: true
+			}));
+
+			map.on('click', (e) => {
+				const cElem = document.getElementById("coordinates");
+				cElem.innerHTML = e.lngLat.lat + ', ' + e.lngLat.lng;
+
+				var markerElement = document.createElement('div');
+				markerElement.setAttribute('style', 'width:20px; height:20px');
+				var svgElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+				svgElement.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+				svgElement.setAttribute('viewBox', '0 0 10 10');
+				svgElement.innerHTML = '<circle cx="5" cy="5" r="5" fill="white"/><circle cx="5" cy="5" r="4.9" fill="black"/><circle cx="5" cy="5" r="3.7" fill="white"/><circle cx="5" cy="5" r="2" fill="black"/>';
+				markerElement.appendChild(svgElement);
+				const marker = new maplibregl.Marker({
+					element: markerElement,
+					draggable: true
+				}).setLngLat(e.lngLat).addTo(map);
+				marker.getElement().addEventListener('click', (e) => {
+					console.log('marker clicked', e);
+					e.stopPropagation();
+				});
+				marker.on('dragend', (e) => {
+					console.log('marker dragend', e);
+				});
+			});
 		}
 	</script>
 </head>
 	<body onload="onLoad();"> 
 		<div id="map"></div>
+		<pre id="coordinates"></pre>
 	</body>
 </html>
