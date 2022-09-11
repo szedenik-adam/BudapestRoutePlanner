@@ -8,3 +8,6 @@
 /budapest.zip
 /scripts/local.js
 style*json*
+/.vs
+/fonts
+/mapbox*

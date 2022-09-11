@@ -11,8 +11,9 @@
 	<script type="text/javascript" charset="utf-8" src="scripts/gtfs.js"></script>
 	<script type="text/javascript" charset="utf-8" src="scripts/style.js"></script>
 	<script type="text/javascript" charset="utf-8" src="scripts/local.js"></script>
+	<script type="text/javascript" charset="utf-8" src="scripts/route_ui.js"></script>
 	<script>
-		var map;
+		var map, routeUI;
 		var gtfs, gtfsRoutes;
 
 		function onLoad()
@@ -29,31 +30,16 @@
 			map.addControl(new maplibregl.GeolocateControl({
 				positionOptions: { enableHighAccuracy: true },
 				trackUserLocation: true
+			}).on('geolocate', (e) => {
+				console.log('geolocate', e);
 			}));
 
-			map.on('click', (e) => {
-				const cElem = document.getElementById("coordinates");
-				cElem.innerHTML = e.lngLat.lat + ', ' + e.lngLat.lng;
-
-				var markerElement = document.createElement('div');
-				markerElement.setAttribute('style', 'width:20px; height:20px');
-				var svgElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-				svgElement.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-				svgElement.setAttribute('viewBox', '0 0 10 10');
-				svgElement.innerHTML = '<circle cx="5" cy="5" r="5" fill="white"/><circle cx="5" cy="5" r="4.9" fill="black"/><circle cx="5" cy="5" r="3.7" fill="white"/><circle cx="5" cy="5" r="2" fill="black"/>';
-				markerElement.appendChild(svgElement);
-				const marker = new maplibregl.Marker({
-					element: markerElement,
-					draggable: true
-				}).setLngLat(e.lngLat).addTo(map);
-				marker.getElement().addEventListener('click', (e) => {
-					console.log('marker clicked', e);
-					e.stopPropagation();
-				});
-				marker.on('dragend', (e) => {
-					console.log('marker dragend', e);
-				});
-			});
+			routeUI = new RouteUI(map);
+			routeUI.addMarkerOnClick();
+			routeUI.addLinesTest();
+			routeUI.addLinesTest();
+			routeUI.addLinesTest();
+			setInterval(function(){routeUI.addLinesTest()}, 1000);
 		}
 	</script>
 </head>
