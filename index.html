@@ -11,6 +11,7 @@
 	<script type="text/javascript" charset="utf-8" src="scripts/gtfs.js"></script>
 	<script type="text/javascript" charset="utf-8" src="scripts/style.js"></script>
 	<script type="text/javascript" charset="utf-8" src="scripts/local.js"></script>
+	<script type="text/javascript" charset="utf-8" src="scripts/menuControl.js"></script>
 	<script type="text/javascript" charset="utf-8" src="scripts/route_ui.js"></script>
 	<script>
 		var map, mapUI, route;
@@ -32,6 +33,8 @@
 			}).on('geolocate', (e) => {
 				console.log('geolocate', e);
 			}));
+
+			map.addControl(new MenuControl(),'top-left');
 
 			mapUI = new MapUI(map);
 			mapUI.addMarkerOnClick();
