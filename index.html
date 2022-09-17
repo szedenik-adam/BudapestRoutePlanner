@@ -38,6 +38,7 @@
 
 			route = new Route(mapUI);
 			setInterval(function(){
+				if(route.source==null){return;}
 				route.clearFeatures();
 				route.addFeature([
 					[19.05499444493165+Math.random()*0.0005-0.00025, 47.52649376411256+Math.random()*0.0005-0.00025],
