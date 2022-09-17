@@ -1,5 +1,5 @@
 
-class RouteUI {
+class MapUI {
   constructor(map) {
     this.map = map;
 	
@@ -20,7 +20,7 @@ class RouteUI {
 	  	    console.log('style loaded', this.onStyleLoaded.length);
 			const funcs = [...this.onStyleLoaded];
 			this.onStyleLoaded = [];
-	  	    for(const func of funcs) func.call(this);
+	  	    for(const func of funcs) func[0].call(func[1]);
 	  	  }
 			
 		  if (this.onStyleLoaded.length > 0) {
@@ -63,10 +63,16 @@ class RouteUI {
 	else this.map.off('click', this._addMarkerOnClickEventHandler);
   }
   
-  addLinesTest()
+  callAfterMapStyleLoaded(ctx, func)
   {
-	if(!this.styleLoaded){ this.onStyleLoaded.push(this.addLinesTest); return;}
-
+	if (!this.styleLoaded) { this.onStyleLoaded.push([func, ctx]); }
+	else { func.call(ctx); }
+  }
+  
+  addLinesTest() { this.callAfterMapStyleLoaded(this, this._addLinesTest); }
+  
+  _addLinesTest()
+  {
 	var geoJson = {
 	  'type': 'geojson',
 	  'data': {
@@ -86,7 +92,7 @@ class RouteUI {
 		  },
 		  {
 			'type': 'Feature',
-			'properties': {'color':'#00ff00'},
+			'properties': {'color':'#00ff00', 'width':20},
 			'geometry': {
 			  'type': 'LineString',
 			  'coordinates': [
@@ -98,7 +104,7 @@ class RouteUI {
 		]
 	  }
     };
-	const source = map.getSource('customLines');
+	const source = map.getSource('customLines'); console.log('source',source);
 	if(!source) map.addSource('customLines', geoJson);
 	else source.setData(geoJson.data);
 	
@@ -114,8 +120,63 @@ class RouteUI {
 			},
 			'paint': {
 			'line-color': ['get', 'color'],
-			'line-width': 8
+			'line-width': ['number', ['get', 'width'], 8],
+			'line-blur': 0.5
 			}
 		});
   }
+}
+
+class Route {
+	constructor (mapUI) {
+		this.mapUI = mapUI;
+		this.mapUI.callAfterMapStyleLoaded(this, this.initSourceAndLayer);
+		this.source = null;
+		this.layer = null;
+	}
+	initSourceAndLayer() {
+		var geoJson = {
+		  'type': 'geojson',
+		  'data': {
+			  'type': 'FeatureCollection',
+			  'features': []
+		  }
+		};
+		this.mapUI.map.addSource('routeSource', geoJson);
+		this.mapUI.map.addLayer({
+			'id': 'routeLayer',
+			'type': 'line',
+			'source': 'routeSource',
+			'layout': {
+			'line-join': 'round',
+			'line-cap': 'round'
+			},
+			'paint': {
+			'line-color': ['get', 'color'],
+			'line-width': ['number', ['get', 'width'], 8],
+			'line-blur': 0.5
+			}
+		});
+		this.source = this.mapUI.map.getSource('routeSource');
+		this.layer = map.getLayer('routeLayer');
+	}
+	addFeature(coords, properties={}) {
+		var feature = {
+			'type': 'Feature',
+			'properties': properties,
+			'geometry': {
+				'type': 'LineString',
+				'coordinates': coords
+			}
+		};
+		this.source._data.features.push(feature);
+	}
+	clearFeatures() {
+		this.source._data.features = [];
+	}
+	commitChanges() {
+		// might need to be called after style is loaded like:
+		//this.mapUI.callAfterMapStyleLoaded(this, function(){this.source.setData(this.source._data)});
+		this.source.setData(this.source._data);
+	}
 }
