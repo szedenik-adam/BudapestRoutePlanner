@@ -4,7 +4,7 @@ var gtfs_urls = ['https://bprp.pages.dev/budapest_gtfs.zipaa','https://bprp.page
 postMessage('initializing');
 
 importScripts('gtfs.js');
-importScripts('local.js');
+try{importScripts('local.js');}catch(e){}
 importScripts('external/jszip.min.js');
 importScripts('external/idb.min.js');
 
