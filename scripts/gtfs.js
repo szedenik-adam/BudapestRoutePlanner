@@ -4,16 +4,27 @@ const dayZero = (new Date(2000,0,1)).getTime();
 var walkSpeed = 5/3600;
 var transferWait = 1*60;
 
-async function GTFS(zip) {
+async function GTFS(db, zip = null) {
+	var startTime = performance.now();
 	var me = {};
+	formats.forEach(format => {
+		format.fields.forEach(f => {
+			if(f.type == 'primary-key') {
+				me[f.id] = {};
+				me[f.id+'N'] = -1;
+			}
+		});
+	});
 
 	var data = {};
 	me.data = data;
 
 	for (const format of formats) {
-		var table = await loadGTFSFile(zip, format);
+		var table = await loadGTFSFile(zip, format, db, me);
 		if (table) data[format.id] = table;
 	};
+	var endTime = performance.now();
+	console.log(`gtfs.zip parsing took ${(endTime - startTime)/1000} seconds`);
 	
 	var shapes = {};
 	for (const point of data.shapes) {
@@ -60,6 +71,9 @@ async function GTFS(zip) {
 				route:route,
 				service:service,
 				stops:[]
+			}
+			if(route == undefined) {
+				console.log('undefined route', t.route_id);
 			}
 			route.trips.push(trip);
 			service.trips.push(trip);
@@ -210,14 +224,11 @@ async function GTFS(zip) {
 
 	return me;
 
-	async function loadGTFSFile(zip, format) {
-		//var filename = path+'/'+format.id+'.txt';
+	async function loadGTFSFile(zip, format, db, me) {
 		try {
-			//var data = fs.readFileSync(filename, 'utf8').split(/[\r\n]/);
 			var data = await zip.files[format.id+'.txt'].async("string");
 			data = data.split(/[\r\n]/);
 		} catch (e) {
-			//console.info(e)
 			if (format.required) {
 				console.error('missing '+format.id)
 				throw e;
@@ -227,8 +238,7 @@ async function GTFS(zip) {
 			}
 		}
 
-		// parse lines
-		data = data.map(line => {
+		function ParseLine(line) {
 			if (line.length <= 0) return false;
 			if (line.indexOf('"') < 0) return line.split(',');
 
@@ -259,10 +269,10 @@ async function GTFS(zip) {
 			}
 			fields.push(field);
 			return fields;
-		}).filter(l => l);
+		}
 
 		// parse keys
-		var keys = data.shift();
+		var keys = ParseLine(data[0]);
 
 		var missing = substractElements(format.fields.filter(f=>f.required).map(f=>f.id), keys);
 		if (missing.length > 0) console.error('missing keys in "'+format.id+'": '+missing.join(', '))
@@ -278,16 +288,21 @@ async function GTFS(zip) {
 			return field
 		})
 
-		data = data.map(l => {
+		var entries = [];
+		for(var i=1; i<data.length; i++) {
+			var line = data[i];
+			if(!line) continue;
+			var l = ParseLine(line);
 			if (l.length != fields.length) throw Error();
 			var obj = {};
 			l.forEach((s,i) => {
 				var f = fields[i];
 				if(!f) {return;}
-				obj[f.id] = f.parse(s);
+				obj[f.id] = f.parse(s, me);
 			})
-			return obj;
-		})
+			entries.push(obj);
+		}
+		data = entries;
 
 		console.log('imported '+data.length+' entries from '+format.id);
 
@@ -321,7 +336,7 @@ var formats = ([
 		required:true,
 		details:'Individual locations where vehicles pick up or drop off passengers.',
 		fields:[
-			{id:'stop_id',type:'string',required:true,details:'Contains an ID that uniquely identifies a stop or station. Multiple routes may use the same stop. The stop_id is dataset unique.'},
+			{id:'stop_id',type:'primary-key',required:true,details:'Contains an ID that uniquely identifies a stop or station. Multiple routes may use the same stop. The stop_id is dataset unique.'},
 			{id:'stop_code',type:'string',required:false,details:'Contains short text or a number that uniquely identifies the stop for passengers. Stop codes are often used in phone-based transit information systems or printed on stop signage to make it easier for riders to get a stop schedule or real-time arrival information for a particular stop.'},
 			{id:'stop_name',type:'string',required:true,details:'Contains the name of a stop or station. Please use a name that people will understand in the local and tourist vernacular.'},
 			{id:'stop_desc',type:'string',required:false,details:'Contains a description of a stop. Please provide useful, quality information. Do not simply duplicate the name of the stop.'},
@@ -339,7 +354,7 @@ var formats = ([
 		required:true,
 		details:'Transit routes. A route is a group of trips that are displayed to riders as a single service.',
 		fields:[
-			{id:'route_id',type:'string',required:true,details:'Contains an ID that uniquely identifies a route. The route_id is dataset unique.'},
+			{id:'route_id',type:'primary-key',required:true,details:'Contains an ID that uniquely identifies a route. The route_id is dataset unique.'},
 			{id:'agency_id',type:'string',required:false,details:'Defines an agency for the specified route. This value is referenced from the agency.txt file. Use this field when you are providing data for routes from more than one agency.'},
 			{id:'route_short_name',type:'string',required:true,details:'Contains the short name of a route. This will often be a short, abstract identifier like "32", "100X", or "Green" that riders use to identify a route, but which doesn\'t give any indication of what places the route serves.'},
 			{id:'route_long_name',type:'string',required:true,details:'Contains the full name of a route. This name is generally more descriptive than the route_short_name and will often include the route\'s destination or stop. At least one of route_short_name or route_long_name must be specified, or potentially both if appropriate. If the route does not have a long name, please specify a route_short_name and use an empty string as the value for this field.'},
@@ -355,9 +370,9 @@ var formats = ([
 		required:true,
 		details:'Trips for each route. A trip is a sequence of two or more stops that occurs at specific time.',
 		fields:[
-			{id:'route_id',type:'string',required:true,details:'Contains an ID that uniquely identifies a route. This value is referenced from the routes.txt file.'},
-			{id:'service_id',type:'string',required:true,details:'The service_id contains an ID that uniquely identifies a set of dates when service is available for one or more routes. This value is referenced from the calendar.txt or calendar_dates.txt file.'},
-			{id:'trip_id',type:'string',required:true,details:'Contains an ID that identifies a trip. The trip_id is dataset unique.'},
+			{id:'route_id',type:'foreign-key',required:true,details:'Contains an ID that uniquely identifies a route. This value is referenced from the routes.txt file.'},
+			{id:'service_id',type:'primary-key',required:true,details:'The service_id contains an ID that uniquely identifies a set of dates when service is available for one or more routes. This value is referenced from the calendar.txt or calendar_dates.txt file.'},
+			{id:'trip_id',type:'primary-key',required:true,details:'Contains an ID that identifies a trip. The trip_id is dataset unique.'},
 			{id:'trip_headsign',type:'string',required:false,details:'Contains the text that appears on a sign that identifies the trip\'s destination to passengers. Use this field to distinguish between different patterns of service in the same route. If the headsign changes during a trip, you can override the trip_headsign by specifying values for the the stop_headsign field in stop_times.txt.'},
 			{id:'trip_short_name',type:'string',required:false,details:'Contains the text that appears in schedules and sign boards to identify the trip to passengers, for example, to identify train numbers for commuter rail trips. If riders do not commonly rely on trip names, please leave this field blank.'},
 			{id:'direction_id',type:'int',required:false,details:'Contains a binary value that indicates the direction of travel for a trip. Use this field to distinguish between bi-directional trips with the same route_id. This field is not used in routing; it provides a way to separate trips by direction when publishing time tables. You can specify names for each direction with the trip_headsign field.'},
@@ -371,10 +386,10 @@ var formats = ([
 		required:true,
 		details:'Times that a vehicle arrives at and departs from individual stops for each trip.',
 		fields:[
-			{id:'trip_id',type:'string',required:true,details:'Contains an ID that identifies a trip. This value is referenced from the trips.txt file.'},
+			{id:'trip_id',type:'foreign-key',required:true,details:'Contains an ID that identifies a trip. This value is referenced from the trips.txt file.'},
 			{id:'arrival_time',type:'time',required:true,details:'Specifies the arrival time at a specific stop for a specific trip on a route. The time is measured from "noon minus 12h" (effectively midnight, except for days on which daylight savings time changes occur) at the beginning of the service date. For times occurring after midnight on the service date, enter the time as a value greater than 24:00:00 in HH:MM:SS local time for the day on which the trip schedule begins. If you don\'t have separate times for arrival and departure at a stop, enter the same value for arrival_time and departure_time.'},
 			{id:'departure_time',type:'time',required:true,details:'Specifies the departure time from a specific stop for a specific trip on a route. The time is measured from "noon minus 12h" (effectively midnight, except for days on which daylight savings time changes occur) at the beginning of the service date. For times occurring after midnight on the service date, enter the time as a value greater than 24:00:00 in HH:MM:SS local time for the day on which the trip schedule begins. If you don\'t have separate times for arrival and departure at a stop, enter the same value for arrival_time and departure_time.'},
-			{id:'stop_id',type:'string',required:true,details:'Contains an ID that uniquely identifies a stop. Multiple routes may use the same stop. The stop_id is referenced from the stops.txt file. If location_type is used in stops.txt, all stops referenced in stop_times.txt must have location_type of 0.'},
+			{id:'stop_id',type:'foreign-key',required:true,details:'Contains an ID that uniquely identifies a stop. Multiple routes may use the same stop. The stop_id is referenced from the stops.txt file. If location_type is used in stops.txt, all stops referenced in stop_times.txt must have location_type of 0.'},
 			{id:'stop_sequence',type:'int',required:true,details:'Identifies the order of the stops for a particular trip. The values for stop_sequence must be non-negative integers, and they must increase along the trip.'},
 			{id:'stop_headsign',type:'string',required:false,details:'Contains the text that appears on a sign that identifies the trip\'s destination to passengers. Use this field to override the default trip_headsign (in trips.txt) when the headsign changes between stops. If this headsign is associated with an entire trip, use trip_headsign instead.'},
 			{id:'pickup_type',type:'string',required:false,details:'Indicates whether passengers are picked up at a stop as part of the normal schedule or whether a pickup at the stop is not available. This field also allows the transit agency to indicate that passengers must call the agency or notify the driver to arrange a pickup at a particular stop. Valid values for this field are:'},
@@ -387,7 +402,7 @@ var formats = ([
 		required:false,
 		details:'Dates for service IDs using a weekly schedule. Specify when service starts and ends, as well as days of the week where service is available.',
 		fields:[
-			{id:'service_id',type:'string',required:true,details:'Contains an ID that uniquely identifies a set of dates when service is available for '},
+			{id:'service_id',type:'foreign-key',required:true,details:'Contains an ID that uniquely identifies a set of dates when service is available for '},
 			{id:'monday',type:'int',required:true,details:'Contains a binary value that indicates whether the service is valid for all Mondays.'},
 			{id:'tuesday',type:'int',required:true,details:'Contains a binary value that indicates whether the service is valid for all Tuesdays.'},
 			{id:'wednesday',type:'int',required:true,details:'Contains a binary value that indicates whether the service is valid for all Wednesdays.'},
@@ -403,7 +418,7 @@ var formats = ([
 		required:false,
 		details:'Exceptions for the service IDs defined in the calendar.txt file. If calendar_dates.txt includes ALL dates of service, this file may be specified instead of calendar.txt.',
 		fields:[
-			{id:'service_id',type:'string',required:true,details:'Contains an ID that uniquely identifies a set of dates when a service exception is available for one or more routes. Each (service_id, date) pair can only appear once in calendar_dates.txt. If the a service_id value appears in both the calendar.txt and calendar_dates.txt files, the information in calendar_dates.txt modifies the service information specified in calendar.txt. This field is referenced by the trips.txt file.'},
+			{id:'service_id',type:'foreign-key',required:true,details:'Contains an ID that uniquely identifies a set of dates when a service exception is available for one or more routes. Each (service_id, date) pair can only appear once in calendar_dates.txt. If the a service_id value appears in both the calendar.txt and calendar_dates.txt files, the information in calendar_dates.txt modifies the service information specified in calendar.txt. This field is referenced by the trips.txt file.'},
 			{id:'date',type:'date',required:true,details:'Specifies a particular date when service availability is different than the norm. You can use the exception_type field to indicate whether service is available on the specified date.'},
 			{id:'exception_type',type:'int',required:true,details:'Indicates whether service is available on the date specified in the date field.'},
 		]
@@ -462,11 +477,30 @@ formats.forEach(format => {
 		format.fieldLookup.set(f.id,f)
 
 		switch (f.type) {
-			case 'string': f.parse = s => s; break;
-			case 'float':  f.parse = s => parseFloat(s); break;
-			case 'int':    f.parse = s => parseInt(s,10); break;
-			case 'date':   f.parse = s => GTFSDate2days(s); break;
-			case 'time':   f.parse = s => parseTime(s); break;
+			case 'string':/*case 'primary-key':case 'foreign-key':*/ f.parse = (s,g) => s; break;
+			case 'float':  f.parse = (s,g) => parseFloat(s); break;
+			case 'int':    f.parse = (s,g) => parseInt(s,10); break;
+			case 'date':   f.parse = (s,g) => GTFSDate2days(s); break;
+			case 'time':   f.parse = (s,g) => parseTime(s); break;
+			case 'primary-key':
+				f.parse = function(s,g){
+					var id = g[f.id][s];
+					if(id==undefined) {
+						id = ++g[f.id+'N'];
+						g[f.id][s] = id;
+					}
+					return id;
+				}
+				break;
+			case 'foreign-key':
+				f.parse = function(s,g){
+					var id = g[f.id][s];
+					if(id==undefined) {
+						console.log("unknown key for ",f.id,s);
+					}
+					return id;
+				}
+				break;
 			default: throw console.error('Unknown field type "'+f.type+'"');
 		}
 	});
@@ -498,7 +532,7 @@ function route(start, end, data, startTime=null)
 	if(!startTime){ startTime = Date.now(); }
 	startTime -= (new Date(data.start_date));
 	startTime = startTime/1000 + 2*3600;
-	startTime = startTime % (86400*7) // quick fix, if only old data is available
+	startTime = startTime % (86400*7); // quick fix, if only old data is available
 				
 	var performanceStart = new Date();
 	var endTime = startTime+86400;
@@ -520,7 +554,7 @@ function route(start, end, data, startTime=null)
 		stop.arr = {time:time, history:[{
 			text:'walk to '+stop.name,
 			duration: duration,
-			points: [start,stop],
+			points: [{lat:start.lat,lon:start.lon}, {lat:end.lat,lon:end.lon}],
 			start:startTime,
 			end:startTime + duration
 		}]}
@@ -556,7 +590,7 @@ function route(start, end, data, startTime=null)
 							duration: (trip.stopDep[index]+offset) - checkStop.arr.time + transferWait,
 						})
 						var points = [];
-						for (var j = index; j <= i; j++) points.push(trip.stops[j]);
+						for (var j = index; j <= i; j++) points.push({lat:trip.stops[j].lat, lon:trip.stops[j].lon});
 						stop.arr.history.push({
 							text: trip.route.name+' to '+stop.name,
 							duration: trip.stopArr[i] - trip.stopDep[index],
@@ -578,7 +612,7 @@ function route(start, end, data, startTime=null)
 				nStop.arr.history.push({
 					text:'walk to '+nStop.name,
 					duration: walkTime,
-					points: [nStop],
+					points: [{lat:nStop.lat,lon:nStop.lon}],
 					start:minTime,
 					end:arrTimeByWalk
 				});
@@ -593,7 +627,7 @@ function route(start, end, data, startTime=null)
 		stop.arr.history.push({
 			text:'walk to destination',
 			duration:stop.endDuration,
-			points:[stop,end],
+			points:[{lat:stop.lat,lon:stop.lon}, {lat:end.lat,lon:end.lon}],
 			end:stop.arr.time
 		});
 		if (bestTime > stop.arr.time) {
@@ -622,9 +656,9 @@ function route(start, end, data, startTime=null)
 	})
 	html.push('</table>');
 	html = html.join('');
-//	$('#output').html(html);
+
+	console.log(`routing took ${performanceDuration/1000} seconds`);
 	
-//	draw(path);
 	function fmtTime(t) {
 		t = t % 86400;
 		var s = (t % 60).toFixed(0);
@@ -634,6 +668,7 @@ function route(start, end, data, startTime=null)
 		var h = (t % 24).toFixed(0);
 		return h+':'+('00'+m).slice(-2)
 	}
+	return {'path':path, 'html':html};
 }
 
 function sqr(v) { return v*v }

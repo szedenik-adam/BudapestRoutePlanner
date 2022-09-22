@@ -7,7 +7,6 @@
 	<script src='scripts/maplibre-gl/maplibre-gl.js'></script>
 	<link href='scripts/maplibre-gl/maplibre-gl.css' rel='stylesheet' />
 	<script type="text/javascript" charset="utf-8" src="scripts/external/turf.min.js"></script>
-	<script type="text/javascript" charset="utf-8" src="scripts/external/jszip.min.js"></script>
 	<script type="text/javascript" charset="utf-8" src="scripts/gtfs.js"></script>
 	<script type="text/javascript" charset="utf-8" src="scripts/style.js"></script>
 	<script type="text/javascript" charset="utf-8" src="scripts/local.js"></script>
@@ -15,7 +14,7 @@
 	<script type="text/javascript" charset="utf-8" src="scripts/route_ui.js"></script>
 	<script>
 		var map, mapUI, route;
-		var gtfs, gtfsRoutes;
+		var gtfs, gtfsRoutes, gtfsWorker;
 
 		function onLoad()
 		{
@@ -54,6 +53,15 @@
 				  ], {'color':'#00ff00', 'width':20});
 				route.commitChanges();
 			}, 1000);
+			
+			gtfsWorker = new Worker('scripts/gtfsWorker.js');
+			gtfsWorker.onmessage = function(e) {
+				console.log('Message from worker:',e.data);
+				if(typeof e.data !== 'object' || e.data === null) return;
+				if('route' in e.data) {
+					console.log('got route', e.data);
+				}
+			}
 		}
 	</script>
 </head>
