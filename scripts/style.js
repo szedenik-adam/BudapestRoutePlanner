@@ -15,12 +15,12 @@ var style = {
   "sources": {
     "openmaptiles": {
       "type": "vector",
-      "tiles": [ "https://bc61f7f8.bprp.pages.dev/{z}/{x}/{y}.pbf" ],
+      "tiles": [ "https://bprp.pages.dev/{z}/{x}/{y}.pbf" ],
       "minzoom": 0,
       "maxzoom": 14
     }
   },
-  "sprite": "https://szedenik-adam.github.io//BudapestRoutePlanner/osm-sprite/sprite",
+  "sprite": "https://szedenik-adam.github.io/BudapestRoutePlanner/osm-sprite/sprite",
   "glyphs": "https://geoserveis.icgc.cat/contextmaps/glyphs/{fontstack}/{range}.pbf", 
     "layers": [
     {
