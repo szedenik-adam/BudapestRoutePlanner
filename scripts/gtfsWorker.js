@@ -32,7 +32,7 @@ async function initGTFS()
 	console.log('feedAge', feedAge);
 	
 	var gtfs_zip = null;
-	if(true || feedAge > 7)
+	if(feedAge > 7)
 	{
 		db.clearReqs = [];
 		for(const tName of db.objectStoreNames) {
