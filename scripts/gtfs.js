@@ -47,6 +47,7 @@ async function GTFS(db, zip = null) {
 		data.routes.forEach(r => {
 			routes.set(r.route_id, {
 				name: r.route_short_name.length > 0 ? r.route_short_name : r.route_long_name,
+				color: [r.route_color, r.route_text_color],
 				trips: []
 			})
 		})
@@ -554,7 +555,8 @@ function route(start, end, data, startTime=null)
 		stop.arr = {time:time, history:[{
 			text:'walk to '+stop.name,
 			duration: duration,
-			points: [[start.lon,start.lat], [stop.lon,stop.lat]],
+			points: [[start.lon,start.lat], [stop.lon,stop.lat]], 
+			color:'gray',
 			start:startTime,
 			end:startTime + duration
 		}]}
@@ -595,6 +597,7 @@ function route(start, end, data, startTime=null)
 							text: trip.route.name+' to '+stop.name,
 							duration: trip.stopArr[i] - trip.stopDep[index],
 							points:points,
+							color:'#'+trip.route.color[0],
 							start:trip.stopDep[index]+offset,
 							end:  trip.stopArr[i]+offset,
 						})
@@ -612,7 +615,8 @@ function route(start, end, data, startTime=null)
 				nStop.arr.history.push({
 					text:'walk to '+nStop.name,
 					duration: walkTime,
-					points: [[nStop.lon,nStop.lat]], 
+					points: [[checkStop.lon,checkStop.lat], [nStop.lon,nStop.lat]], 
+					color:'gray',
 					start:minTime,
 					end:arrTimeByWalk
 				});
@@ -628,6 +632,7 @@ function route(start, end, data, startTime=null)
 			text:'walk to destination',
 			duration:stop.endDuration,
 			points:[[stop.lon,stop.lat], [end.lon,end.lat]],
+			color:'gray',
 			end:stop.arr.time
 		});
 		if (bestTime > stop.arr.time) {
@@ -652,7 +657,7 @@ function route(start, end, data, startTime=null)
 			'<tr><td>'+startTime+'</td><td>'+endTime+'</td><td class="text">'+step.text+'</td><td>'+duration+'</td></tr>'
 		].join(''));
 		console.log(startTime+' '+endTime+' '+step.text, duration);
-		if (step.points) path = path.concat(step.points);
+		if (step.points) path.push({p:step.points, c:step.color||'black'});
 	})
 	html.push('</table>');
 	html = html.join('');

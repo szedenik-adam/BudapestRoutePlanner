@@ -47,7 +47,7 @@
 				if('route' in e.data) {
 					console.log('got route', e.data);
 					route.clearFeatures();
-					route.addFeature(e.data.route.path, {'color':'red'});
+					for(const part of e.data.route.path) route.addFeature(part.p, {'color':part.c});
 					route.commitChanges();
 				}
 			}

@@ -119,7 +119,7 @@ class MapUI {
 			'line-cap': 'round'
 			},
 			'paint': {
-			'line-color': ['get', 'color'],
+			'line-color': ['string', ['get', 'color'], 'gray'],
 			'line-width': ['number', ['get', 'width'], 8],
 			'line-blur': 0.5
 			}
@@ -152,7 +152,7 @@ class Route {
 			'line-cap': 'round'
 			},
 			'paint': {
-			'line-color': ['get', 'color'],
+			'line-color': ['string', ['get', 'color'], 'gray'],
 			'line-width': ['number', ['get', 'width'], 8],
 			'line-blur': 0.5
 			}
