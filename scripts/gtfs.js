@@ -554,7 +554,7 @@ function route(start, end, data, startTime=null)
 		stop.arr = {time:time, history:[{
 			text:'walk to '+stop.name,
 			duration: duration,
-			points: [{lat:start.lat,lon:start.lon}, {lat:end.lat,lon:end.lon}],
+			points: [[start.lon,start.lat], [stop.lon,stop.lat]],
 			start:startTime,
 			end:startTime + duration
 		}]}
@@ -590,7 +590,7 @@ function route(start, end, data, startTime=null)
 							duration: (trip.stopDep[index]+offset) - checkStop.arr.time + transferWait,
 						})
 						var points = [];
-						for (var j = index; j <= i; j++) points.push({lat:trip.stops[j].lat, lon:trip.stops[j].lon});
+						for (var j = index; j <= i; j++) points.push([trip.stops[j].lon,trip.stops[j].lat]);
 						stop.arr.history.push({
 							text: trip.route.name+' to '+stop.name,
 							duration: trip.stopArr[i] - trip.stopDep[index],
@@ -612,7 +612,7 @@ function route(start, end, data, startTime=null)
 				nStop.arr.history.push({
 					text:'walk to '+nStop.name,
 					duration: walkTime,
-					points: [{lat:nStop.lat,lon:nStop.lon}],
+					points: [[nStop.lon,nStop.lat]], 
 					start:minTime,
 					end:arrTimeByWalk
 				});
@@ -627,7 +627,7 @@ function route(start, end, data, startTime=null)
 		stop.arr.history.push({
 			text:'walk to destination',
 			duration:stop.endDuration,
-			points:[{lat:stop.lat,lon:stop.lon}, {lat:end.lat,lon:end.lon}],
+			points:[[stop.lon,stop.lat], [end.lon,end.lat]],
 			end:stop.arr.time
 		});
 		if (bestTime > stop.arr.time) {

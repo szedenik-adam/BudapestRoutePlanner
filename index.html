@@ -39,20 +39,6 @@
 			mapUI.addMarkerOnClick();
 
 			route = new Route(mapUI);
-			setInterval(function(){
-				if(route.source==null){return;}
-				route.clearFeatures();
-				route.addFeature([
-					[19.05499444493165+Math.random()*0.0005-0.00025, 47.52649376411256+Math.random()*0.0005-0.00025],
-					[19.063230222910875+Math.random()*0.0005-0.00025, 47.52454046418376+Math.random()*0.0005-0.00025],
-					[19.06258690877337+Math.random()*0.0005-0.00025, 47.52289446901065+Math.random()*0.0005-0.00025], 
-				  ], {'color':'red'});
-				route.addFeature([
-					[19.05809131631935, 47.523902263181526],
-					[19.057243786593375, 47.52230969067739]
-				  ], {'color':'#00ff00', 'width':20});
-				route.commitChanges();
-			}, 1000);
 			
 			gtfsWorker = new Worker('scripts/gtfsWorker.js');
 			gtfsWorker.onmessage = function(e) {
@@ -60,6 +46,9 @@
 				if(typeof e.data !== 'object' || e.data === null) return;
 				if('route' in e.data) {
 					console.log('got route', e.data);
+					route.clearFeatures();
+					route.addFeature(e.data.route.path, {'color':'red'});
+					route.commitChanges();
 				}
 			}
 		}
