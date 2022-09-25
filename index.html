@@ -24,6 +24,10 @@
 				center: [19.06086, 47.52918],
 				zoom: 15
 			});
+
+			mapUI = new MapUI(map);
+			mapUI.addMarkerOnClick();
+
 			map.addControl(new maplibregl.FullscreenControl({ container: document.querySelector('body') }));
 			map.addControl(new maplibregl.NavigationControl());
 			map.addControl(new maplibregl.GeolocateControl({
@@ -31,12 +35,13 @@
 				trackUserLocation: true
 			}).on('geolocate', (e) => {
 				console.log('geolocate', e);
+			}).on('trackuserlocationstart', function() {
+				mapUI.tracking(true);
+			}).on('trackuserlocationend', function() {
+				mapUI.tracking(false);
 			}));
 
 			map.addControl(new MenuControl(),'top-left');
-
-			mapUI = new MapUI(map);
-			mapUI.addMarkerOnClick();
 
 			route = new Route(mapUI);
 			
@@ -46,11 +51,13 @@
 				if(typeof e.data !== 'object' || e.data === null) return;
 				if('route' in e.data) {
 					console.log('got route', e.data);
+					mapUI.routeReceived();
 					route.clearFeatures();
 					for(const part of e.data.route.path) route.addFeature(part.p, {'color':part.c});
 					route.commitChanges();
 				}
 			}
+			mapUI.setWorker(gtfsWorker);
 		}
 	</script>
 </head>

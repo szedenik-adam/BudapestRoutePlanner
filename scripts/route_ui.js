@@ -30,19 +30,35 @@ class MapUI {
 	    styleLoadCheck();
 	  });
 	}
+	this.rSourceMarker = null;
+	this.rDestinationMarker = null;
+	this.boundAddMarkerOnClickEventHandler = this._addMarkerOnClickEventHandler.bind(this);
+	this.geotracking = false;
+	this.worker = null;
+	this.routing = false;
+	this.nextRouteTask = null;
   }
   
   _addMarkerOnClickEventHandler(e)
   {
+	const destMarker = (this.rSourceMarker != null || this.geotracking);
 	const cElem = document.getElementById("coordinates");
 	cElem.innerHTML = e.lngLat.lat + ', ' + e.lngLat.lng;
+	
+	if(destMarker && this.rDestinationMarker != null) {
+		this.rDestinationMarker.setLngLat(e.lngLat);
+		this.addRouteTask();
+		return;
+	}
 	
 	var markerElement = document.createElement('div');
 	markerElement.setAttribute('style', 'width:20px; height:20px');
 	var svgElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 	svgElement.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
 	svgElement.setAttribute('viewBox', '0 0 10 10');
-	svgElement.innerHTML = '<circle cx="5" cy="5" r="5" fill="white"/><circle cx="5" cy="5" r="4.9" fill="black"/><circle cx="5" cy="5" r="3.7" fill="white"/><circle cx="5" cy="5" r="2" fill="black"/>';
+	if(destMarker)
+		 svgElement.innerHTML = '<circle cx="5" cy="5" r="5" fill="white"/><circle cx="5" cy="5" r="4.9" fill="black"/><circle cx="5" cy="5" r="3.7" fill="white"/><circle cx="5" cy="5" r="2" fill="black"/>';
+	else svgElement.innerHTML = '<circle cx="5" cy="5" r="5" fill="white"/><circle cx="5" cy="5" r="4.9" fill="black"/><circle cx="5" cy="5" r="3.7" fill="white"/>';
 	markerElement.appendChild(svgElement);
 	const marker = new maplibregl.Marker({
 		element: markerElement,
@@ -52,21 +68,58 @@ class MapUI {
 		console.log('marker clicked', e);
 		e.stopPropagation();
 	});
-	marker.on('dragend', (e) => {
-		console.log('marker dragend', e);
+	marker.on('drag', (e) => {
+		this.addRouteTask();
 	});
+	marker.on('dragend', (e) => {
+		this.addRouteTask();
+	});
+	if(destMarker) this.rDestinationMarker = marker; else this.rSourceMarker = marker;
+	this.addRouteTask();
   }
 
   addMarkerOnClick(enable=true)
   {
-	if(enable) this.map.on('click', this._addMarkerOnClickEventHandler);
-	else this.map.off('click', this._addMarkerOnClickEventHandler);
+	if(enable) this.map.on('click', this.boundAddMarkerOnClickEventHandler);
+	else this.map.off('click', this.boundAddMarkerOnClickEventHandler);
   }
   
   callAfterMapStyleLoaded(ctx, func)
   {
 	if (!this.styleLoaded) { this.onStyleLoaded.push([func, ctx]); }
 	else { func.call(ctx); }
+  }
+  
+  tracking(isEnabled)
+  {
+	  this.geotracking = isEnabled;
+	  console.log('geotracking', this.geotracking);
+  }
+  
+  setWorker(worker)
+  {
+	  this.worker = worker;
+  }
+  
+  addRouteTask()
+  {
+	  if(this.worker == null) return;
+	  const task = {src:this.rSourceMarker.getLngLat(),dst:this.rDestinationMarker.getLngLat()};
+	  if(!this.routing) {
+		  this.routing = true;
+		  this.worker.postMessage(task);
+	  } else {
+		  this.nextRouteTask = task;
+	  }
+  }
+  
+  routeReceived()
+  {
+	  this.routing = false;
+	  if(this.nextRouteTask) {
+		  this.addRouteTask();
+		  this.nextRouteTask = null;
+	  }
   }
   
   addLinesTest() { this.callAfterMapStyleLoaded(this, this._addLinesTest); }

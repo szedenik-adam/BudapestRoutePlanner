@@ -90,13 +90,10 @@ async function initGTFS()
 initGTFS();
 
 onmessage = function(e) {
-  console.log('Worker: Message received from main script');
-  const result = e.data[0] * e.data[1];
-  if (isNaN(result)) {
-    postMessage('Please write two numbers');
-  } else {
-    const workerResult = 'Result: ' + result;
-    console.log('Worker: Posting message back to main script');
-    postMessage(workerResult);
-  }
+	if('src' in e.data && 'dst' in e.data) {
+		console.log('Worker: Message received from main script', e.data);
+		var result = route({lat:e.data.src.lat,lon:e.data.src.lng}, {lat:e.data.dst.lat,lon:e.data.dst.lng}, gtfsRoutes);
+		console.log('sending route to UI thread');
+		postMessage({'route':result});
+	}
 }
