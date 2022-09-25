@@ -19,22 +19,138 @@ async function GTFS(db, zip = null) {
 	var data = {};
 	me.data = data;
 
-	for (const format of formats) {
-		var table = await loadGTFSFile(zip, format, db, me);
-		if (table) data[format.id] = table;
-	};
+	var streamPromise = new Promise(function(resolve,reject){
+		const decoder = new TextDecoder();
+		var file = "", table=null, format=null, remainder=null;
+		var zipStream = zip.generateInternalStream({type:"uint8array"})
+		.on('data', function (data, metadata) {
+			function ParseLine2(line, format, me, decoder) {
+				line = decoder.decode(line);
+				var entry = Array(format.length);
+				var fieldNum = 0, lineStart = 0, commaPos=0, endOffset;
+				while(lineStart < line.length) {
+					commaPos = line.indexOf(',', lineStart);
+					if(commaPos == -1) commaPos = line.length;
+					endOffset = 0;
+					if(commaPos == lineStart+1) { } // empty entry
+					else if(line[lineStart] == '"') { // text between "
+						lineStart++;
+						if(line[commaPos-1] != '"') {
+							var aposPos = commaPos;
+							do { aposPos = line.indexOf('"', aposPos+1); } while (aposPos!=-1 && line[aposPos-1]=='\\');
+							if (aposPos!=-1) { commaPos=aposPos+1; endOffset = 1;}
+						}
+					}
+					const ff = format[fieldNum];
+					// field is between lineStart to commaPos-1-endOffset
+					const str = line.substring(lineStart, commaPos-endOffset);
+					if(ff.parse) entry[fieldNum] = ff.parse(str, me);
+					
+					lineStart = commaPos + 1;
+					fieldNum++;
+				}
+				return entry;
+			}
+			if(metadata.currentFile == null) {
+				console.log('last on-data');
+				if(remainder) { // process previous file's last line.
+					entry = ParseLine2(remainder, format, me, decoder);
+					me.data[table].push(entry);
+					remainder = null;
+				}
+				return;
+			}
+			if(metadata.currentFile != file) {
+				if(remainder) { // process previous file's last line.
+					entry = ParseLine2(remainder, format, me, decoder);
+					me.data[table].push(entry);
+					remainder = null;
+				}
+				file = metadata.currentFile;
+				format = null;
+				remainder = null;
+				table = file.substring(0,file.indexOf('.'));
+				me.data[table]=[];
+				if(data.length > 4 && data[0]==80 && data[1]==75 && data[2]==3 && data[3]==4) return;
+			}
+			var startPos = 0;
+			var newlinePos;
+			while((newlinePos = data.indexOf(10, startPos)) != -1) {
+				if(format == null) {
+					var formatLine;
+					if (remainder == null) {
+						formatLine = data.subarray(0, newlinePos);
+					} else {
+						formatLine = new Uint8Array(remainder.length + newlinePos);
+						formatLine.set(remainder);
+						formatLine.set(data.subarray(0, newlinePos), remainder.length);
+						remainder = null;
+					}
+					formatLine = decoder.decode(formatLine);
+					format = ParseLine(formatLine);
+					for(const fileFormat of formats) {
+						if(fileFormat.id==table) {
+							for(var fi=0;fi<format.length;fi++) {
+								for(const field of fileFormat.fields) {
+									if(format[fi]==field.id) {
+										format[fi]={name:field.id,type:field.type,parse:GetFormatParser(field.type, field.id)};
+										break;
+									}
+								}
+								if(typeof format[fi] !== 'object') {format[fi] = {name:format[fi],type:'null',parse:null}}
+							}
+							break;
+						}
+					}
+					me[table+"_f"] = new Map();
+					format.forEach((f,fi) => { me[table+"_f"].set(f.name, fi) });
+					console.log('format', metadata.currentFile, formatLine, format, me[table+"_f"]);
+				} else {
+					var entry;
+					if(remainder) {
+						var line = new Uint8Array(remainder.length + newlinePos - startPos);
+						line.set(remainder);
+						line.set(data.subarray(startPos, newlinePos), remainder.length);
+						remainder = null;
+						entry = ParseLine2(line, format, me, decoder);
+					} else {
+						var line = data.subarray(startPos, newlinePos);
+						entry = ParseLine2(line, format, me, decoder);
+					}
+					me.data[table].push(entry);
+				}
+				startPos = newlinePos + 1;
+			}
+			if(newlinePos == -1) {
+				if(startPos == 0) remainder = data;
+				else if(startPos < data.length) remainder = data.subarray(startPos);
+			}
+		})
+		.on('error', function (e) {
+			console.log("zip-error",e);
+			reject(e);
+		})
+		.on('end', function () {
+			console.log("zip-end");
+			resolve('');
+		})
+		.resume();
+	});
+	await streamPromise;
+	
 	var endTime = performance.now();
 	console.log(`gtfs.zip parsing took ${(endTime - startTime)/1000} seconds`);
 	
 	var shapes = {};
+	const shape_id_pos = me.shapes_f.get('shape_id');
+	const shape_pt_sequence_pos = me.shapes_f.get('shape_pt_sequence');
 	for (const point of data.shapes) {
-		const sid = point.shape_id;
-		delete point.shape_id;
+		const sid = point[shape_id_pos];
 		if(sid in shapes) shapes[sid].push(point);
 		else shapes[sid]=[point];
 	}
 	for (const points of Object.values(shapes)) {
-		points.sort((a, b) => { return a.shape_pt_sequence > b.shape_pt_sequence });
+		points.sort((a, b) => { return a[shape_pt_sequence_pos] > b[shape_pt_sequence_pos] });
 	}
 	me.shapes = shapes;
 
@@ -44,19 +160,25 @@ async function GTFS(db, zip = null) {
 
 		// init routes
 		var routes = new Map();
+		const r_id_pos = me.routes_f.get('route_id');
+		const r_short_name_pos = me.routes_f.get('route_short_name');
+		const r_long_name_pos = me.routes_f.get('route_long_name');
+		const r_color_pos = me.routes_f.get('route_color');
+		const r_text_color_pos = me.routes_f.get('route_text_color');
 		data.routes.forEach(r => {
-			routes.set(r.route_id, {
-				name: r.route_short_name.length > 0 ? r.route_short_name : r.route_long_name,
-				color: [r.route_color, r.route_text_color],
+			routes.set(r[r_id_pos], {
+				name: r[r_short_name_pos].length > 0 ? r[r_short_name_pos] : r[r_long_name_pos],
+				color: [r[r_color_pos], r[r_text_color_pos]],
 				trips: []
 			})
 		})
 
 		// init services
 		var services = new Map();
+		const t_sid_pos = me.trips_f.get('service_id');
 		data.trips.forEach(t => {
-			if (!services.has(t.service_id)) {
-				services.set(t.service_id, {
+			if (!services.has(t[t_sid_pos])) {
+				services.set(t[t_sid_pos], {
 					dates:new Set(),
 					trips:[]
 				});
@@ -65,38 +187,51 @@ async function GTFS(db, zip = null) {
 
 		// init trips
 		var trips = new Map();
+		const t_id_pos = me.trips_f.get('trip_id');
+		const t_rid_pos = me.trips_f.get('route_id');
+		const t_shape_id_pos = me.trips_f.get('shape_id');
 		data.trips.forEach(t => {
-			var route = routes.get(t.route_id);
-			var service = services.get(t.service_id);
+			var route = routes.get(t[t_rid_pos]);
+			var service = services.get(t[t_sid_pos]);
 			var trip = {
 				route:route,
 				service:service,
-				stops:[]
+				stops:[],
+				shape_id:t[t_shape_id_pos]
 			}
 			if(route == undefined) {
-				console.log('undefined route', t.route_id);
+				console.log('undefined route', t[t_rid_pos]);
 			}
 			route.trips.push(trip);
 			service.trips.push(trip);
-			trips.set(t.trip_id, trip);
+			trips.set(t[t_id_pos], trip);
 		})
 
 		// init stops
 		var stops = new Map();
+		const s_id_pos = me.stops_f.get('stop_id');
+		const s_name_pos = me.stops_f.get('stop_name');
+		const s_lat_pos = me.stops_f.get('stop_lat');
+		const s_lon_pos = me.stops_f.get('stop_lon');
 		data.stops.forEach(s => {
-			stops.set(s.stop_id, {
-				name:s.stop_name,
-				lat:s.stop_lat,
-				lon:s.stop_lon
+			stops.set(s[s_id_pos], {
+				name:s[s_name_pos],
+				lat:s[s_lat_pos],
+				lon:s[s_lon_pos]
 			});
 		});
 
 		// init stop_times
 		var stop_times = new Map();
+		const st_tid_pos = me.stop_times_f.get('trip_id');
+		const st_sid_pos = me.stop_times_f.get('stop_id');
+		const st_seq_pos = me.stop_times_f.get('stop_sequence');
+		const st_arr_pos = me.stop_times_f.get('arrival_time');
+		const st_dep_pos = me.stop_times_f.get('departure_time');
 		data.stop_times.forEach(st => {
-			var trip = trips.get(st.trip_id);
-			var stop = stops.get(st.stop_id);
-			trip.stops[st.stop_sequence] = [st.arrival_time,st.departure_time,stop]
+			var trip = trips.get(st[st_tid_pos]);
+			var stop = stops.get(st[st_sid_pos]);
+			trip.stops[st[st_seq_pos]] = [st[st_arr_pos],st[st_dep_pos],stop]
 		})
 		trips.forEach(t => {
 			t.stops = t.stops.filter(s => s);
@@ -108,18 +243,23 @@ async function GTFS(db, zip = null) {
 		// now clean up
 		if('calendar' in data) {data.calendar.forEach(c => { throw Error() });}
 
+		const cd_date_pos = me.calendar_dates_f.get('date');
+		const cd_exception_type_pos = me.calendar_dates_f.get('exception_type');
+		const cd_service_id_pos = me.calendar_dates_f.get('service_id');
 		data.calendar_dates.forEach(d => {
-			if (d.date < startDay) return;
-			if (d.date >   endDay) return;
+			if (d[cd_date_pos] < startDay) return;
+			if (d[cd_date_pos] >   endDay) return;
 
-			if (d.exception_type !== 1) throw Error();
+			if (d[cd_exception_type_pos] !== 1) {
+				throw Error();
+			}
 
-			var service = services.get(d.service_id);
+			var service = services.get(d[cd_service_id_pos]);
 			if(!service){
-				console.warn('service not found', d.service_id);
+				console.warn('service not found', d[cd_service_id_pos]);
 				return;
 			}
-			service.dates.add(d.date - startDay);
+			service.dates.add(d[cd_date_pos] - startDay);
 			service._use = true;
 		})
 
@@ -198,10 +338,10 @@ async function GTFS(db, zip = null) {
 
 		var result = {
 			start_date: startDate,
-			stops: stops,//ao2oa(stops),
-			routes: routes,//ao2oa(routes),
-			services: services,//ao2oa(services),
-			trips: trips,//ao2oa(trips),
+			stops: stops,
+			routes: routes,
+			services: services,
+			trips: trips,
 		}
 
 		return result;
@@ -224,96 +364,6 @@ async function GTFS(db, zip = null) {
 	}
 
 	return me;
-
-	async function loadGTFSFile(zip, format, db, me) {
-		try {
-			var data = await zip.files[format.id+'.txt'].async("string");
-			data = data.split(/[\r\n]/);
-		} catch (e) {
-			if (format.required) {
-				console.error('missing '+format.id)
-				throw e;
-			} else {
-				console.warn('missing '+format.id)
-				return;
-			}
-		}
-
-		function ParseLine(line) {
-			if (line.length <= 0) return false;
-			if (line.indexOf('"') < 0) return line.split(',');
-
-			var inQuotes = false, escape = false;
-			var fields = [], field = '';
-			for (var i = 0; i < line.length; i++) {
-				var c = line[i];
-
-				if (escape) {
-					field += c;
-					escape = false;
-					continue;
-				} else {
-					escape = (c === '\\');
-				}
-
-				if ((c === ',') && !inQuotes) {
-					fields.push(field);
-					field = '';
-					continue;
-				}
-
-				if (c === '"') {
-					inQuotes = !inQuotes;
-				} else {
-					field += c;
-				}
-			}
-			fields.push(field);
-			return fields;
-		}
-
-		// parse keys
-		var keys = ParseLine(data[0]);
-
-		var missing = substractElements(format.fields.filter(f=>f.required).map(f=>f.id), keys);
-		if (missing.length > 0) console.error('missing keys in "'+format.id+'": '+missing.join(', '))
-		
-		var unknown = substractElements(keys, format.fields.map(f=>f.id));
-		//if (unknown.length > 0) console.error('unknown keys in "'+format.id+'": '+unknown.join(', '))
-			
-		if ((missing.length > 0) /*|| (unknown.length > 0)*/) throw new Error('check your GTFS!')
-
-		var fields = keys.map(key => {
-			var field = format.fieldLookup.get(key);
-			//if (!field) throw Error();
-			return field
-		})
-
-		var entries = [];
-		for(var i=1; i<data.length; i++) {
-			var line = data[i];
-			if(!line) continue;
-			var l = ParseLine(line);
-			if (l.length != fields.length) throw Error();
-			var obj = {};
-			l.forEach((s,i) => {
-				var f = fields[i];
-				if(!f) {return;}
-				obj[f.id] = f.parse(s, me);
-			})
-			entries.push(obj);
-		}
-		data = entries;
-
-		console.log('imported '+data.length+' entries from '+format.id);
-
-		return data;
-
-		function substractElements(a1, a2) {
-			a2 = new Set(a2);
-			return a1.filter(k => !a2.has(k));
-		}
-	}
 }
 
 // Source: https://developers.google.com/transit/gtfs/reference/
@@ -364,7 +414,17 @@ var formats = ([
 			{id:'route_url',type:'string',required:false,details:'Contains the URL of a web page about that particular route. This should be different from the agency_url.'},
 			{id:'route_color',type:'string',required:false,details:'In systems that have colors assigned to routes, this defines a color that corresponds to a route. The color must be provided as a six-character hexadecimal number, for example, 00FFFF. If no color is specified, the default route color is white (FFFFFF).'},
 			{id:'route_text_color',type:'string',required:false,details:'Specifies a legible color to use for text drawn against a background of route_color. The color must be provided as a six-character hexadecimal number, for example, FFD700. If no color is specified, the default text color is black (000000).'},
-			{id:'shape_id',type:'string',required:false,details:'Identifies a geospatial shape that describes the vehicle travel path for a trip.'},
+		]
+	},{
+		id:'shapes',
+		required:false,
+		details:'Rules for drawing lines on a map to represent a transit organization\'s routes.',
+		fields:[
+			{id:'shape_id',type:'primary-key',required:true,details:'Identifies a shape.'},
+			{id:'shape_pt_lat',type:'float',required:true,details:'Latitude of a shape point.'},
+			{id:'shape_pt_lon',type:'float',required:true,details:'Longitude of a shape point.'},
+			{id:'shape_pt_sequence',type:'int',required:true,details:'Sequence in which the shape points connect to form the shape. Values must increase along the trip but do not need to be consecutive.'},
+			{id:'shape_dist_traveled',type:'float',required:false,details:'Actual distance traveled along the shape from the first shape point to the point specified in this record.'}
 		]
 	},{
 		id:'trips',
@@ -378,7 +438,7 @@ var formats = ([
 			{id:'trip_short_name',type:'string',required:false,details:'Contains the text that appears in schedules and sign boards to identify the trip to passengers, for example, to identify train numbers for commuter rail trips. If riders do not commonly rely on trip names, please leave this field blank.'},
 			{id:'direction_id',type:'int',required:false,details:'Contains a binary value that indicates the direction of travel for a trip. Use this field to distinguish between bi-directional trips with the same route_id. This field is not used in routing; it provides a way to separate trips by direction when publishing time tables. You can specify names for each direction with the trip_headsign field.'},
 			{id:'block_id',type:'string',required:false,details:'Identifies the block to which the trip belongs. A block consists of two or more sequential trips made using the same vehicle, where a passenger can transfer from one trip to the next just by staying in the vehicle. The block_id must be referenced by two or more trips in trips.txt.'},
-			{id:'shape_id',type:'string',required:false,details:'Contains an ID that defines a shape for the trip. This value is referenced from the shapes.txt file. The shapes.txt file allows you to define how a line should be drawn on the map to represent a trip.'},
+			{id:'shape_id',type:'foreign-key',required:false,details:'Contains an ID that defines a shape for the trip. This value is referenced from the shapes.txt file. The shapes.txt file allows you to define how a line should be drawn on the map to represent a trip.'},
 			{id:'wheelchair_accessible',type:'int',required:false,details:''},
 			{id:'bikes_allowed',type:'int',required:false,details:''},
 		]
@@ -436,17 +496,6 @@ var formats = ([
 		fields:[
 		]
 	},{
-		id:'shapes',
-		required:false,
-		details:'Rules for drawing lines on a map to represent a transit organization\'s routes.',
-		fields:[
-			{id:'shape_id',type:'string',required:true,details:'Identifies a shape.'},
-			{id:'shape_pt_lat',type:'float',required:true,details:'Latitude of a shape point.'},
-			{id:'shape_pt_lon',type:'float',required:true,details:'Longitude of a shape point.'},
-			{id:'shape_pt_sequence',type:'int',required:true,details:'Sequence in which the shape points connect to form the shape. Values must increase along the trip but do not need to be consecutive.'},
-			{id:'shape_dist_traveled',type:'float',required:false,details:'Actual distance traveled along the shape from the first shape point to the point specified in this record.'}
-		]
-	},{
 		id:'frequencies',
 		required:false,
 		details:'Headway (time between trips) for routes with variable frequency of service.',
@@ -477,35 +526,75 @@ formats.forEach(format => {
 	format.fields.forEach(f => {
 		format.fieldLookup.set(f.id,f)
 
-		switch (f.type) {
-			case 'string':/*case 'primary-key':case 'foreign-key':*/ f.parse = (s,g) => s; break;
-			case 'float':  f.parse = (s,g) => parseFloat(s); break;
-			case 'int':    f.parse = (s,g) => parseInt(s,10); break;
-			case 'date':   f.parse = (s,g) => GTFSDate2days(s); break;
-			case 'time':   f.parse = (s,g) => parseTime(s); break;
-			case 'primary-key':
-				f.parse = function(s,g){
-					var id = g[f.id][s];
-					if(id==undefined) {
-						id = ++g[f.id+'N'];
-						g[f.id][s] = id;
-					}
-					return id;
-				}
-				break;
-			case 'foreign-key':
-				f.parse = function(s,g){
-					var id = g[f.id][s];
-					if(id==undefined) {
-						console.log("unknown key for ",f.id,s);
-					}
-					return id;
-				}
-				break;
-			default: throw console.error('Unknown field type "'+f.type+'"');
-		}
+		f.parse = GetFormatParser(f.type, f.id);
 	});
 })
+
+function GetFormatParser(f_type, f_name)
+{
+	var result;
+	switch (f_type) {
+		case 'string':/*case 'primary-key':case 'foreign-key':*/ result = (s,g) => s; break;
+		case 'float':  result = (s,g) => parseFloat(s); break;
+		case 'int':    result = (s,g) => parseInt(s,10); break;
+		case 'date':   result = (s,g) => GTFSDate2days(s); break;
+		case 'time':   result = (s,g) => parseTime(s); break;
+		case 'primary-key':
+			result = function(s,g){
+				var id = g[f_name][s];
+				if(id==undefined) {
+					id = ++g[f_name+'N'];
+					g[f_name][s] = id;
+				}
+				return id;
+			}
+			break;
+		case 'foreign-key':
+			result = function(s,g){
+				var id = g[f_name][s];
+				if(id==undefined) {
+					console.log("unknown key for ",f_name,s);
+				}
+				return id;
+			}
+			break;
+		default: throw console.error('Unknown field type "'+f_type+'"');
+	}
+	return result;
+}
+
+function ParseLine(line) {
+	if (line.length <= 0) return false;
+	if (line.indexOf('"') < 0) return line.split(',');
+
+	var inQuotes = false, escape = false;
+	var fields = [], field = '';
+	for (var i = 0; i < line.length; i++) {
+		var c = line[i];
+
+		if (escape) {
+			field += c;
+			escape = false;
+			continue;
+		} else {
+			escape = (c === '\\');
+		}
+
+		if ((c === ',') && !inQuotes) {
+			fields.push(field);
+			field = '';
+			continue;
+		}
+
+		if (c === '"') {
+			inQuotes = !inQuotes;
+		} else {
+			field += c;
+		}
+	}
+	fields.push(field);
+	return fields;
+}
 
 function parseTime(s) {
 	s = s.split(':');
