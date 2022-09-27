@@ -141,16 +141,18 @@ async function GTFS(db, zip = null) {
 	var endTime = performance.now();
 	console.log(`gtfs.zip parsing took ${(endTime - startTime)/1000} seconds`);
 	
-	var shapes = {};
+	var shapes = [];
 	const shape_id_pos = me.shapes_f.get('shape_id');
 	const shape_pt_sequence_pos = me.shapes_f.get('shape_pt_sequence');
-	for (const point of data.shapes) {
-		const sid = point[shape_id_pos];
-		if(sid in shapes) shapes[sid].push(point);
+	const shape_pt_lat_pos = me.shapes_f.get('shape_pt_lat');
+	const shape_pt_lon_pos = me.shapes_f.get('shape_pt_lon');
+	const shape_pt_dist_pos = me.shapes_f.get('shape_dist_traveled');
+	data.shapes.sort((a, b) => { return a[shape_pt_sequence_pos] > b[shape_pt_sequence_pos] });
+	for (const shapeRow of data.shapes) {
+		const sid = shapeRow[shape_id_pos];
+		const point = [shapeRow[shape_pt_dist_pos], shapeRow[shape_pt_lon_pos], shapeRow[shape_pt_lat_pos]]
+		if(shapes.length > sid && shapes[sid]!==undefined) shapes[sid].push(point);
 		else shapes[sid]=[point];
-	}
-	for (const points of Object.values(shapes)) {
-		points.sort((a, b) => { return a[shape_pt_sequence_pos] > b[shape_pt_sequence_pos] });
 	}
 	me.shapes = shapes;
 
@@ -228,15 +230,17 @@ async function GTFS(db, zip = null) {
 		const st_seq_pos = me.stop_times_f.get('stop_sequence');
 		const st_arr_pos = me.stop_times_f.get('arrival_time');
 		const st_dep_pos = me.stop_times_f.get('departure_time');
+		const st_dist_pos = me.stop_times_f.get('shape_dist_traveled');
 		data.stop_times.forEach(st => {
 			var trip = trips.get(st[st_tid_pos]);
 			var stop = stops.get(st[st_sid_pos]);
-			trip.stops[st[st_seq_pos]] = [st[st_arr_pos],st[st_dep_pos],stop]
+			trip.stops[st[st_seq_pos]] = [st[st_arr_pos],st[st_dep_pos],stop,st[st_dist_pos]]
 		})
 		trips.forEach(t => {
 			t.stops = t.stops.filter(s => s);
 			t.stopArr = t.stops.map(s => s[0]);
 			t.stopDep = t.stops.map(s => s[1]);
+			t.stopShapeDist = t.stops.map(s => s[3]);
 			t.stops   = t.stops.map(s => s[2]);
 		})
 
@@ -342,6 +346,7 @@ async function GTFS(db, zip = null) {
 			routes: routes,
 			services: services,
 			trips: trips,
+			shapes: shapes,
 		}
 
 		return result;
@@ -455,7 +460,7 @@ var formats = ([
 			{id:'stop_headsign',type:'string',required:false,details:'Contains the text that appears on a sign that identifies the trip\'s destination to passengers. Use this field to override the default trip_headsign (in trips.txt) when the headsign changes between stops. If this headsign is associated with an entire trip, use trip_headsign instead.'},
 			{id:'pickup_type',type:'string',required:false,details:'Indicates whether passengers are picked up at a stop as part of the normal schedule or whether a pickup at the stop is not available. This field also allows the transit agency to indicate that passengers must call the agency or notify the driver to arrange a pickup at a particular stop. Valid values for this field are:'},
 			{id:'drop_off_type',type:'string',required:false,details:'Indicates whether passengers are dropped off at a stop as part of the normal schedule or whether a drop off at the stop is not available. This field also allows the transit agency to indicate that passengers must call the agency or notify the driver to arrange a drop off at a particular stop.'},
-			{id:'shape_dist_traveled',type:'string',required:false,details:'When used in the stop_times.txt file, this field positions a stop as a distance from the first shape point. The shape_dist_traveled field represents a real distance traveled along the route in units such as feet or kilometers. For example, if a bus travels a distance of 5.25 kilometers from the start of the shape to the stop, the shape_dist_traveled for the stop ID would be entered as "5.25".'},
+			{id:'shape_dist_traveled',type:'float',required:false,details:'When used in the stop_times.txt file, this field positions a stop as a distance from the first shape point. The shape_dist_traveled field represents a real distance traveled along the route in units such as feet or kilometers. For example, if a bus travels a distance of 5.25 kilometers from the start of the shape to the stop, the shape_dist_traveled for the stop ID would be entered as "5.25".'},
 			{id:'timepoint',type:'string',required:false,details:'Indicates if the specified arrival and departure times for a stop are strictly adhered to by the transit vehicle or if they are instead approximate and/or interpolated times. The field allows a GTFS producer to provide interpolated stop times that potentially incorporate local knowledge, but still indicate if the times are approximate.'},
 		]
 	},{
@@ -617,6 +622,24 @@ function GTFSDate2days(d) {
 	)
 }
 
+function binarySearch(sortedArray, elem, getKeyFunc) {
+    let start = 0;
+    let end = sortedArray.length - 1;
+    while (start <= end) {
+        let middle = Math.floor((start + end) / 2);
+        if (getKeyFunc(sortedArray[middle]) === elem) { return middle; }
+		else if (getKeyFunc(sortedArray[middle]) < elem) { start = middle + 1; }
+		else { end = middle - 1; }
+    }
+    return start;
+}
+function getShapePoints(shape, minDist, maxDist)
+{
+	const startInd = binarySearch(shape, minDist, x=>x[0]);
+	const endInd = binarySearch(shape, maxDist, x=>x[0]);
+	return shape.slice(startInd, endInd+1).map(p => [p[1],p[2]]);
+}
+
 function route(start, end, data, startTime=null)
 {
 	if(!startTime){ startTime = Date.now(); }
@@ -680,8 +703,8 @@ function route(start, end, data, startTime=null)
 							text: 'wait',
 							duration: (trip.stopDep[index]+offset) - checkStop.arr.time + transferWait,
 						})
-						var points = [];
-						for (var j = index; j <= i; j++) points.push([trip.stops[j].lon,trip.stops[j].lat]);
+						var points = getShapePoints(data.shapes[trip.shape_id], trip.stopShapeDist[index], trip.stopShapeDist[i]);
+						//for (var j = index; j <= i; j++) points.push([trip.stops[j].lon,trip.stops[j].lat]);
 						stop.arr.history.push({
 							text: trip.route.name+' to '+stop.name,
 							duration: trip.stopArr[i] - trip.stopDep[index],
