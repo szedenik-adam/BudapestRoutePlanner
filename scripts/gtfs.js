@@ -640,6 +640,11 @@ function getShapePoints(shape, minDist, maxDist)
 	const endInd = binarySearch(shape, maxDist, x=>x[0]);
 	return shape.slice(startInd, endInd+1).map(p => [p[1],p[2]]);
 }
+function humanReadableSize(bytes) {
+  if (bytes == 0) { return "0.00 B"; }
+  var e = Math.floor(Math.log(bytes) / Math.log(1024));
+  return (bytes/Math.pow(1024, e)).toFixed(2)+' '+' KMGTP'.charAt(e)+'B';
+}
 
 function route(start, end, data, startTime=null)
 {

@@ -43,11 +43,30 @@ async function initGTFS()
 			console.log("clear-req", objectStoreRequest);
 		}
 		
-		var fetches = gtfs_urls.map(gtfs_url => { return fetch(gtfs_url); });
-		const responses = await Promise.all(fetches);
-		const blobsPromises = responses.map(response => {
-			if(!response.ok) { console.log('budapest_gtfs.zip response error'); }
-			return response.blob();
+		var progresses = new Array(gtfs_urls.length).fill([0,20971520]);		
+		var blobsPromises = gtfs_urls.map((gtfs_url, ind) => {
+			return new Promise(function(resolve,reject){
+				const xhr = new XMLHttpRequest();
+				xhr.addEventListener('progress', function(e){
+					progresses[ind]=[e.loaded,e.total];
+					const downloaded = progresses.reduce((prevVal,curVal)=>prevVal+curVal[0],0);
+					const total = progresses.reduce((prevVal,curVal)=>prevVal+curVal[1],0);
+					postMessage({'progress':[`GTFS downloading ${humanReadableSize(downloaded)}/${humanReadableSize(total)}`, downloaded / total]});
+					
+				});
+				xhr.onload = function(e) {
+				  if (this.status == 200) {
+					resolve(this.response);
+				  } else {
+					  console.log('rejecting xhr', this);
+					  reject('');
+				  }
+				};
+				xhr.open("GET", gtfs_url);
+				xhr.responseType = 'blob';
+				xhr.send();
+				return xhr;
+			});
 		});
 		const blobs = await Promise.all(blobsPromises);
 		gtfs_zip = new Blob(blobs);
