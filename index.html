@@ -14,7 +14,7 @@
 	<script type="text/javascript" charset="utf-8" src="scripts/route_ui.js"></script>
 	<script>
 		var map, mapUI, route;
-		var gtfs, gtfsRoutes, gtfsWorker;
+		var gtfs, gtfsRoutes, gtfsWorker, progress;
 
 		function onLoad()
 		{
@@ -44,6 +44,7 @@
 			map.addControl(new MenuControl(),'top-left');
 
 			route = new Route(mapUI);
+			progress = new ProgressBar();
 			
 			gtfsWorker = new Worker('scripts/gtfsWorker.js');
 			gtfsWorker.onmessage = function(e) {
@@ -56,6 +57,12 @@
 					for(const part of e.data.route.path) route.addFeature(part.p, {'color':part.c});
 					route.commitChanges();
 				}
+				if('progress' in e.data) {
+					progress.setTitle(e.data.progress[0]);
+					progress.setProgress(e.data.progress[1]);
+					if(e.data.progress[1] >= 1) progress.hide();
+					else if(!progress.isVisible()) progress.show();
+				}
 			}
 			mapUI.setWorker(gtfsWorker);
 		}
@@ -64,5 +71,11 @@
 	<body onload="onLoad();"> 
 		<div id="map"></div>
 		<pre id="coordinates"></pre>
+		<div id="bottomContainer" class="hidden" onclick="this.classList=['hidden']">
+			<div id="progressContent">
+				<div id="progressTitle">Sample Title</div>
+				<div id="progressBarDiv"><progress id="progressBar" max="100" value="70">70%</progress></div>
+			</div>
+		</div>
 	</body>
 </html>

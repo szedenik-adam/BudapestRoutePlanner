@@ -233,3 +233,12 @@ class Route {
 		this.source.setData(this.source._data);
 	}
 }
+
+class ProgressBar {
+	constructor () {}
+	show(){document.getElementById("bottomContainer").classList=[""];}
+	hide(){document.getElementById("bottomContainer").classList=["hidden"];}
+	isVisible(){return !document.getElementById("bottomContainer").classList.contains("hidden");}
+	setTitle(title){document.getElementById("progressTitle").textContent=title;}
+	setProgress(progress){document.getElementById("progressBar").value=progress*100;}
+}
