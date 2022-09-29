@@ -24,6 +24,7 @@ async function GTFS(db, zip = null) {
 		var file = "", table=null, format=null, remainder=null;
 		var zipStream = zip.generateInternalStream({type:"uint8array"})
 		.on('data', function (data, metadata) {
+			postMessage({'progress':['GTFS parsing',metadata.percent/100]});
 			function ParseLine2(line, format, me, decoder) {
 				line = decoder.decode(line);
 				var entry = Array(format.length);
