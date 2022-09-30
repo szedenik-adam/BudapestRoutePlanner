@@ -18,18 +18,15 @@ async function GTFS(db, zip = null) {
 
 	var data = {};
 	me.data = data;
+	
+	const progressMapper = new ProgressLinearizer('GTFS parsing', db); await progressMapper.load();
 
 	var streamPromise = new Promise(function(resolve,reject){
 		const decoder = new TextDecoder();
-		var file = "", table=null, format=null, remainder=null, lastProgressTime=0;
+		var file = "", table=null, format=null, remainder=null;
 		var zipStream = zip.generateInternalStream({type:"uint8array"})
 		.on('data', function (data, metadata) {
-			const nowMs = Date.now();
-			const progress = metadata.percent/100;
-			if(nowMs - lastProgressTime > 300 || progress>=1) {
-				postMessage({'progress':['GTFS parsing',progress]});
-				lastProgressTime = nowMs;
-			}
+			progressMapper.update(metadata.percent/100);
 			function ParseLine2(line, format, me, decoder) {
 				line = decoder.decode(line);
 				var entry = Array(format.length);

@@ -3,6 +3,7 @@ var gtfs_urls = ['https://bprp.pages.dev/budapest_gtfs.zipaa','https://bprp.page
 
 postMessage('initializing');
 
+importScripts('progressLinearizer.js');
 importScripts('gtfs.js');
 try{importScripts('local.js');}catch(e){}
 importScripts('external/jszip.min.js');
