@@ -25,8 +25,9 @@ async function GTFS(db, zip = null) {
 		var zipStream = zip.generateInternalStream({type:"uint8array"})
 		.on('data', function (data, metadata) {
 			const nowMs = Date.now();
-			if(nowMs - lastProgressTime > 300) {
-				postMessage({'progress':['GTFS parsing',metadata.percent/100]});
+			const progress = metadata.percent/100;
+			if(nowMs - lastProgressTime > 300 || progress>=1) {
+				postMessage({'progress':['GTFS parsing',progress]});
 				lastProgressTime = nowMs;
 			}
 			function ParseLine2(line, format, me, decoder) {
