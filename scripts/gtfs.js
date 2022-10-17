@@ -683,107 +683,113 @@ function route(start, end, data, startTime=null)
 				
 	var performanceStart = new Date();
 	var endTime = startTime+86400;
+	
 
-	data.stops.forEach(function (stop) {
-		stop.arr = [];
-		stop.checked = false;
-	})
-
-	//console.log(data);
-
-	data.stops.forEach(function (stop) {
-		stop.startDistance = Math.sqrt(sqr((start.lon-stop.lon)*71.6) + sqr((start.lat-stop.lat)*111.3));
-		stop.endDistance   = Math.sqrt(sqr((  end.lon-stop.lon)*71.6) + sqr((  end.lat-stop.lat)*111.3));
-		stop.endDuration   = stop.endDistance/walkSpeed;
-		var duration = stop.startDistance/walkSpeed;
-
-		var time = startTime + duration + transferWait;
-		stop.arr = {time:time, history:[{
-			text:'walk to '+stop.name,
-			duration: duration,
-			points: [[start.lon,start.lat], [stop.lon,stop.lat]], 
-			color:'gray',
-			start:startTime,
-			end:startTime + duration
-		}]}
-	})
-
-	while (true) {
-		var checkStop = false, minTime = 1e10;
+	if(!('last' in data) || start.lon != data.last.start.lon || start.lat != data.last.start.lat || Math.floor(startTime/60) != Math.floor(data.last.startTime/60))
+	{
 		data.stops.forEach(function (stop) {
-			if (stop.checked) return;
-			if (minTime > stop.arr.time) {
-				minTime = stop.arr.time;
-				checkStop = stop;
-			}
-		})
-		if (!checkStop) break;
+			stop.checked = false;
+			
+			stop.startDistance = Math.sqrt(sqr((start.lon-stop.lon)*71.6) + sqr((start.lat-stop.lat)*111.3));
+			stop.endDistance   = Math.sqrt(sqr((  end.lon-stop.lon)*71.6) + sqr((  end.lat-stop.lat)*111.3));
+			stop.endDuration   = stop.endDistance/walkSpeed;
+			var duration = stop.startDistance/walkSpeed;
 
-		checkStop.trips.forEach(function (entry) {
-			var trip = entry[0];
-			var index = entry[1];
-			trip.dates.forEach(function (date) {
-				var offset = date*86400;
-				var depTime = offset + trip.stopDep[index];
-				if (depTime > endTime) return;
-				if (depTime < minTime) return;
-				for (var i = index+1; i < trip.stopDep.length; i++) {
-					var stop = trip.stops[i];
-					var arrTime =  offset+trip.stopArr[i]+transferWait;
-					if (arrTime < stop.arr.time) {
-						stop.arr.time = arrTime;
-						stop.arr.history = checkStop.arr.history.slice(0)
-						stop.arr.history.push({
-							text: 'wait',
-							duration: (trip.stopDep[index]+offset) - checkStop.arr.time + transferWait,
-						})
-						var points = getShapePoints(data.shapes[trip.shape_id], trip.stopShapeDist[index], trip.stopShapeDist[i]);
-						//for (var j = index; j <= i; j++) points.push([trip.stops[j].lon,trip.stops[j].lat]);
-						stop.arr.history.push({
-							text: trip.route.name+' to '+stop.name,
-							duration: trip.stopArr[i] - trip.stopDep[index],
-							points:points,
-							color:'#'+trip.route.color[0],
-							start:trip.stopDep[index]+offset,
-							end:  trip.stopArr[i]+offset,
-						})
-					}
+			var time = startTime + duration + transferWait;
+			stop.arr = {time:time, history:[{
+				text:'walk to '+stop.name,
+				duration: duration,
+				points: [[start.lon,start.lat], [stop.lon,stop.lat]], 
+				color:'gray',
+				start:startTime,
+				end:startTime + duration
+			}]}
+		})
+
+		while (true) {
+			var checkStop = false, minTime = 1e10;
+			data.stops.forEach(function (stop) {
+				if (stop.checked) return;
+				if (minTime > stop.arr.time) {
+					minTime = stop.arr.time;
+					checkStop = stop;
 				}
 			})
+			if (!checkStop) break;
+
+			checkStop.trips.forEach(function (entry) {
+				var trip = entry[0];
+				var index = entry[1];
+				trip.dates.forEach(function (date) {
+					var offset = date*86400;
+					var depTime = offset + trip.stopDep[index];
+					if (depTime > endTime) return;
+					if (depTime < minTime) return;
+					for (var i = index+1; i < trip.stopDep.length; i++) {
+						var stop = trip.stops[i];
+						var arrTime =  offset+trip.stopArr[i]+transferWait;
+						if (arrTime < stop.arr.time) {
+							stop.arr.time = arrTime;
+							stop.arr.history = checkStop.arr.history.slice(0)
+							stop.arr.history.push({
+								text: 'wait',
+								duration: (trip.stopDep[index]+offset) - checkStop.arr.time + transferWait,
+							})
+							var points = getShapePoints(data.shapes[trip.shape_id], trip.stopShapeDist[index], trip.stopShapeDist[i]);
+							//for (var j = index; j <= i; j++) points.push([trip.stops[j].lon,trip.stops[j].lat]);
+							stop.arr.history.push({
+								text: trip.route.name+' to '+stop.name,
+								duration: trip.stopArr[i] - trip.stopDep[index],
+								points:points,
+								color:'#'+trip.route.color[0],
+								start:trip.stopDep[index]+offset,
+								end:  trip.stopArr[i]+offset,
+							})
+						}
+					}
+				})
+			});
+			checkStop.neighbours.forEach(function (neighbour) {
+				const nStop = neighbour.stop;
+				const walkTime = neighbour.dist/walkSpeed
+				const arrTimeByWalk = minTime + walkTime;
+				if(arrTimeByWalk < nStop.arr.time) {
+					nStop.arr.time = arrTimeByWalk;
+					nStop.arr.history = checkStop.arr.history.slice(0);
+					nStop.arr.history.push({
+						text:'walk to '+nStop.name,
+						duration: walkTime,
+						points: [[checkStop.lon,checkStop.lat], [nStop.lon,nStop.lat]], 
+						color:'gray',
+						start:minTime,
+						end:arrTimeByWalk
+					});
+				}
+			});
+			checkStop.checked = true;
+		}
+		data.last = {start:start, startTime:startTime};
+	} else {
+		console.log('using cached route data');
+		data.stops.forEach(function (stop) {
+			stop.endDistance = Math.sqrt(sqr((end.lon-stop.lon)*71.6) + sqr((end.lat-stop.lat)*111.3));
+			stop.endDuration = stop.endDistance/walkSpeed;
 		});
-		checkStop.neighbours.forEach(function (neighbour) {
-			const nStop = neighbour.stop;
-			const walkTime = neighbour.dist/walkSpeed
-			const arrTimeByWalk = minTime + walkTime;
-			if(arrTimeByWalk < nStop.arr.time) {
-				nStop.arr.time = arrTimeByWalk;
-				nStop.arr.history = checkStop.arr.history.slice(0);
-				nStop.arr.history.push({
-					text:'walk to '+nStop.name,
-					duration: walkTime,
-					points: [[checkStop.lon,checkStop.lat], [nStop.lon,nStop.lat]], 
-					color:'gray',
-					start:minTime,
-					end:arrTimeByWalk
-				});
-			}
-		});
-		checkStop.checked = true;
 	}
 
-	var bestTime = 1e10, bestStop = false;
+	var bestTime = 1e10, bestStop = false, bestLastStep = {};
 	data.stops.forEach(function (stop) {
-		stop.arr.time += stop.endDuration;
-		stop.arr.history.push({
-			text:'walk to destination',
-			duration:stop.endDuration,
-			points:[[stop.lon,stop.lat], [end.lon,end.lat]],
-			color:'gray',
-			end:stop.arr.time
-		});
-		if (bestTime > stop.arr.time) {
-			bestTime = stop.arr.time;
+		const stopTotalTime = stop.arr.time + stop.endDuration;
+		if (bestTime > stopTotalTime) {
+			bestTime = stopTotalTime;
 			bestStop = stop;
+			bestLastStep = {
+				text:'walk to destination',
+				duration:stop.endDuration,
+				points:[[stop.lon,stop.lat], [end.lon,end.lat]],
+				color:'gray',
+				end:stop.arr.time
+			}
 		}
 	})
 
@@ -794,6 +800,7 @@ function route(start, end, data, startTime=null)
 		'<table>'
 	];
 	var path = [];
+	bestStop.arr.history.push(bestLastStep);
 	bestStop.arr.history.forEach(function (step) {
 		var duration = step.duration;
 		duration = Math.ceil(duration/60).toFixed(0)+' Min';
@@ -805,6 +812,7 @@ function route(start, end, data, startTime=null)
 		console.log(startTime+' '+endTime+' '+step.text, duration);
 		if (step.points) path.push({p:step.points, c:step.color||'black'});
 	})
+	bestStop.arr.history.pop();
 	html.push('</table>');
 	html = html.join('');
 
