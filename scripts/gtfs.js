@@ -161,7 +161,25 @@ async function GTFS(db, zip = null) {
 
 	me.extract = function (startDate) {
 		var startDay = date2days(startDate);
-		var endDay   = startDay+7;
+		var result = me.extractDay(startDay);
+		if(typeof result === 'object') {
+			result.day_diff = 0;
+			return result;
+		}
+		if(typeof result === 'number') {
+			const diff = startDay - result + 7;
+			const mod7 = diff % 7;
+			const decr = diff - (mod7 ? mod7-7 : 0);
+			startDay-= decr;
+			result = me.extractDay(startDay);
+			result.day_diff = decr;
+			return result;
+		}
+		return {};
+	}
+	
+	me.extractDay = function (startDay) {
+		var endDay = startDay+7;
 
 		// init routes
 		var routes = new Map();
@@ -250,10 +268,12 @@ async function GTFS(db, zip = null) {
 		// now clean up
 		if('calendar' in data) {data.calendar.forEach(c => { throw Error() });}
 
+		var lastDay = 0;
 		const cd_date_pos = me.calendar_dates_f.get('date');
 		const cd_exception_type_pos = me.calendar_dates_f.get('exception_type');
 		const cd_service_id_pos = me.calendar_dates_f.get('service_id');
 		data.calendar_dates.forEach(d => {
+			lastDay = Math.max(lastDay, d[cd_date_pos]);
 			if (d[cd_date_pos] < startDay) return;
 			if (d[cd_date_pos] >   endDay) return;
 
@@ -268,7 +288,9 @@ async function GTFS(db, zip = null) {
 			}
 			service.dates.add(d[cd_date_pos] - startDay);
 			service._use = true;
+			lastDay = Number.MAX_SAFE_INTEGER;
 		})
+		if(lastDay != Number.MAX_SAFE_INTEGER) return lastDay;
 
 		// which object is in use?
 		services.forEach(s => {
@@ -344,7 +366,7 @@ async function GTFS(db, zip = null) {
 		});
 
 		var result = {
-			start_date: startDate,
+			start_date: days2string(startDay),
 			stops: stops,
 			routes: routes,
 			services: services,
@@ -614,6 +636,10 @@ function date2days(d) {
 	d = (d-dayZero)/(86400000);
 	return Math.round(d);
 }
+function days2string(d) {
+	d = new Date(d*86400000+dayZero);
+	return d.toISOString().substring(0,10);
+}
 
 function GTFSDate2days(d) {
 	return date2days(
@@ -653,7 +679,7 @@ function route(start, end, data, startTime=null)
 	if(!startTime){ startTime = Date.now(); }
 	startTime -= (new Date(data.start_date));
 	startTime = startTime/1000 + 2*3600;
-	startTime = startTime % (86400*7); // quick fix, if only old data is available
+	startTime -= data.day_diff * 86400;
 				
 	var performanceStart = new Date();
 	var endTime = startTime+86400;
@@ -697,7 +723,7 @@ function route(start, end, data, startTime=null)
 			var trip = entry[0];
 			var index = entry[1];
 			trip.dates.forEach(function (date) {
-				var offset = 0;//date*86400;
+				var offset = date*86400;
 				var depTime = offset + trip.stopDep[index];
 				if (depTime > endTime) return;
 				if (depTime < minTime) return;
