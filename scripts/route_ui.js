@@ -186,6 +186,7 @@ class Route {
 		this.mapUI.callAfterMapStyleLoaded(this, this.initSourceAndLayer);
 		this.source = null;
 		this.layer = null;
+		this.stopMarkers = [];
 	}
 	initSourceAndLayer() {
 		var geoJson = {
@@ -211,7 +212,7 @@ class Route {
 			}
 		});
 		this.source = this.mapUI.map.getSource('routeSource');
-		this.layer = map.getLayer('routeLayer');
+		this.layer = this.mapUI.map.getLayer('routeLayer');
 	}
 	addFeature(coords, properties={}) {
 		var feature = {
@@ -232,7 +233,7 @@ class Route {
 			+(Math.floor(parseInt(properties.color.substring(5,7),16)*0.5)).toString(16).padStart(2, '0');
 		}
 		var borderWidth = 9;
-		if('width' in properties) { borderWidth = properties.width + 2; }
+		if('width' in properties) { borderWidth = properties.width + 3; }
 		
 		this.addFeature(coords, {...properties, ...{'color':borderColor,'width':borderWidth}});
 		this.addFeature(coords, properties);
@@ -244,6 +245,40 @@ class Route {
 		// might need to be called after style is loaded like:
 		//this.mapUI.callAfterMapStyleLoaded(this, function(){this.source.setData(this.source._data)});
 		this.source.setData(this.source._data);
+	}
+	addStop(pos) {
+		var markerElement = document.createElement('div');
+		markerElement.setAttribute('style', 'width:20px; height:20px; pointer-events: none;');
+		var svgElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+		svgElement.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+		svgElement.setAttribute('viewBox', '0 0 10 10');
+		svgElement.setAttribute('style', 'overflow: visible;"');
+		svgElement.innerHTML = '<circle cx="5" cy="5" r="3" fill="white"/><circle cx="5" cy="5" r="2.9" fill="black"/><circle cx="5" cy="5" r="1.7" fill="white"/>';
+		//svgElement.innerHTML += '<rect x="-5" y="9" width="20" height="8" rx="4" ry="4" stroke="black" stroke-width="1" fill="white"></rect>'; 
+		//svgElement.innerHTML += '<text x="50%" y="13" dominant-baseline="middle" text-anchor="middle" font-weight="bold" font-size="0.5em" font-family="Calibri, sans-serif" >00:00</text>';
+		markerElement.appendChild(svgElement);
+		const marker = new maplibregl.Marker({
+			element: markerElement
+		}).setLngLat(pos);
+		
+		this.stopMarkers.push(marker);
+		marker.addTo(this.mapUI.map);
+	}
+	drawRoute(route) {
+		this.clearFeatures();
+		for(const part of route) this.addFeatureWithBorder(part.p, {'color':part.c});
+		this.commitChanges();
+		
+		for(const stop of this.stopMarkers) stop.remove();
+		var lastStopPos = [0,0];
+		for(const part of route) {
+			for(const stop of part.s) {
+				if(stop[0]!=lastStopPos[0] || stop[1]!=lastStopPos[1]) {
+					this.addStop(stop);
+					lastStopPos = stop;
+				}
+			}
+		}
 	}
 }
 

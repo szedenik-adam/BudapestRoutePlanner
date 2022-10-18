@@ -736,11 +736,13 @@ function route(start, end, data, startTime=null)
 								duration: (trip.stopDep[index]+offset) - checkStop.arr.time + transferWait,
 							})
 							var points = getShapePoints(data.shapes[trip.shape_id], trip.stopShapeDist[index], trip.stopShapeDist[i]);
-							//for (var j = index; j <= i; j++) points.push([trip.stops[j].lon,trip.stops[j].lat]);
+							var stops = [];
+							for (var j = index; j <= i; j++) stops.push([trip.stops[j].lon,trip.stops[j].lat]);
 							stop.arr.history.push({
 								text: trip.route.name+' to '+stop.name,
 								duration: trip.stopArr[i] - trip.stopDep[index],
 								points:points,
+								stops:stops,
 								color:'#'+trip.route.color[0],
 								start:trip.stopDep[index]+offset,
 								end:  trip.stopArr[i]+offset,
@@ -810,7 +812,7 @@ function route(start, end, data, startTime=null)
 			'<tr><td>'+startTime+'</td><td>'+endTime+'</td><td class="text">'+step.text+'</td><td>'+duration+'</td></tr>'
 		].join(''));
 		console.log(startTime+' '+endTime+' '+step.text, duration);
-		if (step.points) path.push({p:step.points, c:step.color||'black'});
+		if (step.points) path.push({p:step.points, c:step.color||'black', s:step.stops||[]});
 	})
 	bestStop.arr.history.pop();
 	html.push('</table>');

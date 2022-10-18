@@ -53,9 +53,7 @@
 				if('route' in e.data) {
 					console.log('got route', e.data);
 					mapUI.routeReceived();
-					route.clearFeatures();
-					for(const part of e.data.route.path) route.addFeatureWithBorder(part.p, {'color':part.c});
-					route.commitChanges();
+					route.drawRoute(e.data.route.path);
 				}
 				if('progress' in e.data) {
 					progress.setTitle(e.data.progress[0]);
