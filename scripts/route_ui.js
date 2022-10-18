@@ -206,7 +206,7 @@ class Route {
 			},
 			'paint': {
 			'line-color': ['string', ['get', 'color'], 'gray'],
-			'line-width': ['number', ['get', 'width'], 8],
+			'line-width': ['number', ['get', 'width'], 6],
 			'line-blur': 0.5
 			}
 		});
@@ -223,6 +223,19 @@ class Route {
 			}
 		};
 		this.source._data.features.push(feature);
+	}
+	addFeatureWithBorder(coords, properties={}) {
+		var borderColor = 'black';
+		if('color' in properties && properties.color.startsWith('#')) {
+			borderColor = '#'+(Math.floor(parseInt(properties.color.substring(1,3),16)*0.5)).toString(16).padStart(2, '0')
+			+(Math.floor(parseInt(properties.color.substring(3,5),16)*0.5)).toString(16).padStart(2, '0')
+			+(Math.floor(parseInt(properties.color.substring(5,7),16)*0.5)).toString(16).padStart(2, '0');
+		}
+		var borderWidth = 9;
+		if('width' in properties) { borderWidth = properties.width + 2; }
+		
+		this.addFeature(coords, {...properties, ...{'color':borderColor,'width':borderWidth}});
+		this.addFeature(coords, properties);
 	}
 	clearFeatures() {
 		this.source._data.features = [];
