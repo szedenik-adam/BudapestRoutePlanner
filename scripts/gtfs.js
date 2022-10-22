@@ -1,5 +1,3 @@
-"use strict"
-
 const dayZero = (new Date(2000,0,1)).getTime();
 var walkSpeed = 5/3600;
 var transferWait = 1*60;
@@ -159,6 +157,231 @@ async function GTFS(db, zip = null) {
 	}
 	me.shapes = shapes;
 
+	me.dayRange = function() {
+		var min = Number.MAX_SAFE_INTEGER, max = 0;
+		const dateInd = me.calendar_dates_f.get('date');
+		data.calendar_dates.forEach(cd => {
+			if(min > cd[dateInd]) min = cd[dateInd];
+			if(max < cd[dateInd]) max = cd[dateInd];
+		})
+		return [min, max];
+	}
+	
+	me.extractAll = function() {
+	}
+	me.extractCommon = function() { // save stops and shapes and routes.
+		console.log('serializeCommon');
+		// init routes
+		var routes = new Map();
+		const r_id_pos = me.routes_f.get('route_id');
+		const r_short_name_pos = me.routes_f.get('route_short_name');
+		const r_long_name_pos = me.routes_f.get('route_long_name');
+		const r_color_pos = me.routes_f.get('route_color');
+		const r_text_color_pos = me.routes_f.get('route_text_color');
+		data.routes.forEach(r => {
+			routes.set(r[r_id_pos], {
+				name: r[r_short_name_pos].length > 0 ? r[r_short_name_pos] : r[r_long_name_pos],
+				color: [r[r_color_pos], r[r_text_color_pos]],
+				trips: [],
+				_id: r[r_id_pos]
+			})
+		});
+		
+		// init stops
+		var stops = new Map();
+		const s_id_pos = me.stops_f.get('stop_id');
+		const s_name_pos = me.stops_f.get('stop_name');
+		const s_lat_pos = me.stops_f.get('stop_lat');
+		const s_lon_pos = me.stops_f.get('stop_lon');
+		data.stops.forEach(s => {
+			stops.set(s[s_id_pos], {
+				name:s[s_name_pos],
+				lat:s[s_lat_pos],
+				lon:s[s_lon_pos],
+				neighbours:[],
+				_id: s[s_id_pos]
+			});
+		});
+		stops.forEach(s => {
+			// add nearby stops: (not yet: min 10 stop) max 300 meter
+			var neighbourStops = [];
+			stops.forEach( ns => {
+				if(s == ns) return;
+				const distSqr = sqr((s.lon-ns.lon)*71.6) + sqr((s.lat-ns.lat)*111.3);
+				if(distSqr < 0.3*0.3) {
+					const dist = Math.sqrt(distSqr);
+					neighbourStops.push({s:ns, dist:dist});
+				}
+			});
+			s.neighbours = neighbourStops;
+		});
+		
+		// linearize
+		stops = Array.from(stops.values());
+		stops.forEach((s,i) => s._index = i);
+		routes = Array.from(routes.values());
+		routes.forEach((r,i) => r._index = i);
+		
+		//routes = compactArray(routes);
+		//stops = compactArray(stops);
+		
+		return {range:me.dayRange(), stops:stops, routes:routes, shapes:shapes};
+	}
+	me.serializeDay = function(startDay, common) {
+		console.log('serializeDay', startDay, common);
+
+		// init services
+		var services = new Map();
+		const t_sid_pos = me.trips_f.get('service_id');
+		data.trips.forEach(t => {
+			if (!services.has(t[t_sid_pos])) {
+				services.set(t[t_sid_pos], {
+					dates:new Set(),
+					trips:[]
+				});
+			}
+		})
+
+		// init trips
+		var trips = new Map();
+		const t_id_pos = me.trips_f.get('trip_id');
+		const t_rid_pos = me.trips_f.get('route_id');
+		const t_shape_id_pos = me.trips_f.get('shape_id');
+		data.trips.forEach(t => {
+			var route = common.routes[t[t_rid_pos]];
+			var service = services.get(t[t_sid_pos]);
+			var trip = {
+				route:route,
+				service:service,
+				stops:[],
+				shape_id:t[t_shape_id_pos]
+			}
+			if(route == undefined) {
+				console.log('undefined route', t[t_rid_pos]);
+			}
+			route.trips.push(trip);
+			service.trips.push(trip);
+			trips.set(t[t_id_pos], trip);
+		})
+
+		// init stops
+		var stops = Array.from(Array(common.stops.length), () => {});
+		common.stops.forEach(s => {
+			stops[s._id]={
+				trips:[],
+				_id:s._id,
+				_use:false
+			};
+		});
+
+		// init stop_times
+		var stop_times = new Map();
+		const st_tid_pos = me.stop_times_f.get('trip_id');
+		const st_sid_pos = me.stop_times_f.get('stop_id');
+		const st_seq_pos = me.stop_times_f.get('stop_sequence');
+		const st_arr_pos = me.stop_times_f.get('arrival_time');
+		const st_dep_pos = me.stop_times_f.get('departure_time');
+		const st_dist_pos = me.stop_times_f.get('shape_dist_traveled');
+		data.stop_times.forEach(st => {
+			var trip = trips.get(st[st_tid_pos]);
+			var stop = stops[st[st_sid_pos]];
+			trip.stops[st[st_seq_pos]] = [st[st_arr_pos],st[st_dep_pos],stop,st[st_dist_pos]]
+		})
+		trips.forEach(t => {
+			t.stops = t.stops.filter(s => s);
+			t.stopArr = t.stops.map(s => s[0]);
+			t.stopDep = t.stops.map(s => s[1]);
+			t.stopShapeDist = t.stops.map(s => s[3]);
+			t.stops   = t.stops.map(s => s[2]);
+		})
+
+		// now clean up
+		if('calendar' in data) {data.calendar.forEach(c => { throw Error() });}
+
+		const cd_date_pos = me.calendar_dates_f.get('date');
+		const cd_exception_type_pos = me.calendar_dates_f.get('exception_type');
+		const cd_service_id_pos = me.calendar_dates_f.get('service_id');
+		data.calendar_dates.forEach(d => {
+			if (d[cd_date_pos] != startDay) return;
+			//if (d[cd_date_pos] >   endDay) return;
+
+			if (d[cd_exception_type_pos] !== 1) {
+				throw Error();
+			}
+
+			var service = services.get(d[cd_service_id_pos]);
+			if(!service){
+				console.warn('service not found', d[cd_service_id_pos]);
+				return;
+			}
+			service.dates.add(d[cd_date_pos] - startDay);
+			service._use = true;
+		})
+
+		// which object is in use?
+		services.forEach(s => {
+			if (!s._use) return;
+			s.trips.forEach(t => {
+				t._use = true;
+				t.route._use = true;
+				t.stops.forEach(
+					s => 
+					s._use = true
+				);
+			})
+		});
+
+		common.routes.forEach(r => {
+			delete r.trips;
+		});
+		
+		// linearize
+		services = Array.from(services.values());
+		services = services.filter(s => s._use);
+		services.forEach((s,i) => {
+			s.dates = Array.from(s.dates.values());
+			s.dates.sort();
+			delete s.trips;
+			s._index = i;
+		});
+		
+		trips = Array.from(trips.values());
+		trips = trips.filter(t => t._use);
+		trips.forEach((t,i) => {
+			t.route = t.route._id;
+			t.service = t.service._index;
+			t.stops = t.stops.map(s => s._id);
+			delete t._use;
+			t._index = i;
+		});
+
+		stops.forEach(s => (delete s._index, delete s._use));
+		services.forEach(s => (delete s._index, delete s._use));
+
+		trips.forEach(function (trip) {
+			//trip.route = common.routes[trip.route];
+			//trip.service = services[trip.service];
+			//trip.dates = trip.service.dates;
+			trip.stops.forEach(function (stop_index, index) {
+				var stop = stops[stop_index];
+				stop.trips.push([trip._index,index]);
+			});
+		});
+		
+		services = compactArray(services);
+		trips = compactArray(trips);
+		stops = compactArray(stops);
+
+		var result = {
+			start_date: days2string(startDay),
+			services: services,
+			trips: trips,
+			stops: stops
+		}
+		console.log('serializeDay-res', result);
+		return result;
+	}
+	
 	me.extract = function (startDate) {
 		var startDay = date2days(startDate);
 		var result = me.extractDay(startDay);
@@ -338,7 +561,6 @@ async function GTFS(db, zip = null) {
 		
 		stops.forEach(function (stop) {
 			stop.trips = [];
-			stop.tripCount = 0;
 			
 			// add nearby stops: (not yet: min 10 stop) max 300 meter
 			var neighbourStops = [];
@@ -360,7 +582,6 @@ async function GTFS(db, zip = null) {
 			trip.stops = trip.stops.map(function (stop_index, index) {
 				var stop = stops[stop_index];
 				stop.trips.push([trip,index]);
-				stop.tripCount += trip.dates.length;
 				return stop;
 			});
 		});
@@ -830,6 +1051,37 @@ function route(start, end, data, startTime=null)
 		return h+':'+('00'+m).slice(-2)
 	}
 	return {'path':path, 'html':html};
+}
+
+function compactArray(arr) {
+	if(arr.length == 0){return {indToKey:[],data:[]};}
+	
+	const firstElem = arr[0];
+	const firstElemKeys = Object.keys(firstElem)
+	var indToKey = new Array(firstElemKeys.length);
+	var keyToInd = {}
+	var ind = 0;
+	for (const key of firstElemKeys) {
+		indToKey[ind]= key;
+		keyToInd[key] = ind;
+		ind++;
+	}
+	
+	var newArr = [];
+	arr.forEach(elem => {
+		try{
+		var newElem = new Array(indToKey.size);
+		if(elem != null && elem.length != 0)
+			for (const [key, value] of Object.entries(elem)) {
+				newElem[keyToInd[key]] = value;
+			}
+		newArr.push(newElem);
+		}catch(e) {
+			console.log('compactArray problem with elem ',elem);
+		}
+	});
+	
+	return {indToKey:indToKey, keyToInd:keyToInd, data:newArr};
 }
 
 function sqr(v) { return v*v }
