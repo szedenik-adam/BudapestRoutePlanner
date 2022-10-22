@@ -331,9 +331,7 @@ async function GTFS(db, zip = null) {
 			})
 		});
 
-		common.routes.forEach(r => {
-			delete r.trips;
-		});
+		common.routes.forEach(r => { r.trips = []; });
 		
 		// linearize
 		services = Array.from(services.values());
@@ -355,7 +353,7 @@ async function GTFS(db, zip = null) {
 			t._index = i;
 		});
 
-		stops.forEach(s => (delete s._index, delete s._use));
+		stops.forEach(s => (delete s._index, delete s._use, delete s._id));
 		services.forEach(s => (delete s._index, delete s._use));
 
 		trips.forEach(function (trip) {
@@ -367,6 +365,7 @@ async function GTFS(db, zip = null) {
 				stop.trips.push([trip._index,index]);
 			});
 		});
+		trips.forEach(t => (delete t._index));
 		
 		services = compactArray(services);
 		trips = compactArray(trips);
