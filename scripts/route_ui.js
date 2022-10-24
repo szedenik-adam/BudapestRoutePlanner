@@ -265,11 +265,12 @@ class Route {
 		marker.addTo(this.mapUI.map);
 	}
 	drawRoute(route) {
+		for(const stop of this.stopMarkers) stop.remove();
+		
 		this.clearFeatures();
 		for(const part of route) this.addFeatureWithBorder(part.p, {'color':part.c});
 		this.commitChanges();
 		
-		for(const stop of this.stopMarkers) stop.remove();
 		var lastStopPos = [0,0];
 		for(const part of route) {
 			for(const stop of part.s) {
