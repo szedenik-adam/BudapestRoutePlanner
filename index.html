@@ -48,7 +48,6 @@
 			
 			gtfsWorker = new Worker('scripts/gtfsWorker.js');
 			gtfsWorker.onmessage = function(e) {
-				console.log('Message from worker:',e.data);
 				if(typeof e.data !== 'object' || e.data === null) return;
 				if('route' in e.data) {
 					console.log('got route', e.data);
@@ -60,6 +59,10 @@
 					progress.setProgress(e.data.progress[1]);
 					if(e.data.progress[1] >= 1) progress.hide();
 					else if(!progress.isVisible()) progress.show();
+				}
+				if('info' in e.data) {
+					const cElem = document.getElementById("coordinates");
+					cElem.innerHTML = e.data.info;
 				}
 			}
 			mapUI.setWorker(gtfsWorker);
