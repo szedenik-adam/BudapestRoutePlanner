@@ -47,13 +47,6 @@ async function initGTFS()
 				const total = progresses.reduce((prevVal,curVal)=>prevVal+curVal[1],0);
 				postMessage({'progress':[`Timetable downloading ${humanReadableSize(downloaded)}/${humanReadableSize(total)}`, downloaded / total]});
 			});
-			xhr.addEventListener('progress', function(e){
-				progresses[ind]=[e.loaded,e.total];
-				const downloaded = progresses.reduce((prevVal,curVal)=>prevVal+curVal[0],0);
-				const total = progresses.reduce((prevVal,curVal)=>prevVal+curVal[1],0);
-				postMessage({'progress':[`Timetable downloading ${humanReadableSize(downloaded)}/${humanReadableSize(total)}`, downloaded / total]});
-				
-			});
 			xhr.onload = function(e) {
 			  if (this.status == 200) {
 				resolve(this.response);
