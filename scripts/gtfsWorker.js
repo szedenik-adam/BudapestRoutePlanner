@@ -1,5 +1,6 @@
 
 var gtfs_urls = ['https://bprp.pages.dev/budapest_gtfs.zipaa','https://bprp.pages.dev/budapest_gtfs.zipab','https://bprp.pages.dev/budapest_gtfs.zipac'];
+var timetable_url = 'https://bprp.pages.dev/timetable/';
 
 postMessage('initializing');
 
@@ -23,88 +24,78 @@ async function getFeedAgeDays()
 
 async function initGTFS()
 {
+	var startTime = performance.now(), downloadEndTime=0;
+	
 	db = await idb.openDb('gtfs', 2, db => {
 		db.createObjectStore('cache', {keyPath: 'name'});
 		db.createObjectStore('tables', {keyPath: 'name'});
 		db.createObjectStore('extract', {keyPath: 'day'});
 	});
 	
-	const feedAge = await getFeedAgeDays();
-	console.log('feedAge', feedAge);
+	//const feedAge = await getFeedAgeDays();
+	//console.log('feedAge', feedAge);
 	
-	var gtfs_zip = null;
-	if(feedAge > 7)
-	{
-		db.clearReqs = [];
-		for(const tName of db.objectStoreNames) {
-			const tx = db.transaction([tName], "readwrite");
-			const objectStore = tx.objectStore(tName);
-			const objectStoreRequest = objectStore.clear();
-			db.clearReqs[tName] = objectStoreRequest;
-			console.log("clear-req", objectStoreRequest);
-		}
-		
-		var progresses = new Array(gtfs_urls.length).fill([0,20971520]);		
-		var blobsPromises = gtfs_urls.map((gtfs_url, ind) => {
-			return new Promise(function(resolve,reject){
-				const xhr = new XMLHttpRequest();
-				xhr.addEventListener('progress', function(e){
-					progresses[ind]=[e.loaded,e.total];
-					const downloaded = progresses.reduce((prevVal,curVal)=>prevVal+curVal[0],0);
-					const total = progresses.reduce((prevVal,curVal)=>prevVal+curVal[1],0);
-					postMessage({'progress':[`GTFS downloading ${humanReadableSize(downloaded)}/${humanReadableSize(total)}`, downloaded / total]});
-					
-				});
-				xhr.onload = function(e) {
-				  if (this.status == 200) {
-					resolve(this.response);
-				  } else {
-					  console.log('rejecting xhr', this);
-					  reject('');
-				  }
-				};
-				xhr.open("GET", gtfs_url);
-				xhr.responseType = 'blob';
-				xhr.send();
-				return xhr;
+	var gtfs_zip = null; const dayNum = date2days((new Date()).toISOString().split('T')[0]);
+	var urls = [timetable_url+'common.json.zip', timetable_url+dayNum+'.json.zip']; 
+	var progresses = new Array(gtfs_urls.length).fill([0,100]);		
+	var blobsPromises = urls.map((url, ind) => {
+		return new Promise(function(resolve,reject){
+			const xhr = new XMLHttpRequest();
+			xhr.addEventListener('progress', function(e){
+				progresses[ind]=[e.loaded,e.total];
+				const downloaded = progresses.reduce((prevVal,curVal)=>prevVal+curVal[0],0);
+				const total = progresses.reduce((prevVal,curVal)=>prevVal+curVal[1],0);
+				postMessage({'progress':[`Timetable downloading ${humanReadableSize(downloaded)}/${humanReadableSize(total)}`, downloaded / total]});
 			});
+			xhr.addEventListener('progress', function(e){
+				progresses[ind]=[e.loaded,e.total];
+				const downloaded = progresses.reduce((prevVal,curVal)=>prevVal+curVal[0],0);
+				const total = progresses.reduce((prevVal,curVal)=>prevVal+curVal[1],0);
+				postMessage({'progress':[`Timetable downloading ${humanReadableSize(downloaded)}/${humanReadableSize(total)}`, downloaded / total]});
+				
+			});
+			xhr.onload = function(e) {
+			  if (this.status == 200) {
+				resolve(this.response);
+			  } else {
+				  console.log('rejecting json xhr', this);
+				  reject(null);
+			  }
+			};
+			xhr.open("GET", url);
+			xhr.responseType = 'blob';
+			xhr.send();
+			return xhr;
 		});
-		const blobs = await Promise.all(blobsPromises);
-		gtfs_zip = new Blob(blobs);
-		
-		var startTimePerf = new Date();
-		const tx = db.transaction('cache', 'readwrite');
-		const store = tx.objectStore('cache');
-		const putPromise = store.put({name:'budapest_gtfs.zip', data:gtfs_zip, date:new Date()});
-		var performanceDuration = (new Date()) - startTimePerf;
-		console.log(`zip added to idb in ${performanceDuration/1000} seconds`);
-	} else
-	{
-		var startTimePerf = new Date();
-		const tx = db.transaction('cache', 'readonly');
-		const store = tx.objectStore('cache');
-		const cachedObj = await store.get('budapest_gtfs.zip');
-		gtfs_zip = cachedObj.data;
-		var performanceDuration = (new Date()) - startTimePerf;
-		console.log(`zip loaded from idb in ${performanceDuration/1000} seconds`);
+	});
+	try {
+		const zipBlobs = await Promise.all(blobsPromises);
+		downloadEndTime = performance.now();
+		const zipContentPromises = zipBlobs.map(async blob => {
+			var zip = new JSZip();
+			zip = await zip.loadAsync(blob);
+			console.log('zip-parsed', zip, zip.files);
+			return Object.values(zip.files)[0].async("string");
+		});
+		const zipContents = await Promise.all(zipContentPromises);
+		const objects = zipContents.map(content => {
+			console.log('common content', content);
+			return JSON.parse(content);
+		});
+		console.log('zip timetables parsed');
+		gtfsRoutes = initRoutes(objects[0], objects[1], dayNum);
+	}catch(e){
+		console.log(e);
 	}
-		
+
+	var initEndTime = performance.now();
+	const perfStr = `timetable init took ${(initEndTime - startTime)/1000} seconds (download: ${(downloadEndTime - startTime)/1000}, parse: ${(initEndTime - downloadEndTime)/1000})`
+	console.log(perfStr);
 	
-	console.log('budapest_gtfs.zip', gtfs_zip);
-	var zip = new JSZip();
-	zip = await zip.loadAsync(gtfs_zip);
-	console.log('zip-parsed', zip);
-	const agencyContent = await zip.files['agency.txt'].async("string");
-	console.log('zip-file', agencyContent);
-	gtfs = await GTFS(db, zip);
-	console.log('gtfs is set');
-	
-	gtfsRoutes = gtfs.extract((new Date()).toISOString().split('T')[0]);
-	console.log('gtfs-result', '..');// logging gtfsRoutes would cause huge lag on the UI thread.
-	//gtfsRoutes.store(db);
 	var result = route({lat:47.49990791402583,lon:19.080153604244394}, {lat:47.55545590531613,lon:19.043956781329452}, gtfsRoutes);
 	console.log('sending route to UI thread');
 	postMessage({'route':result});
+	postMessage({'info':perfStr+', routing: '+result.perf_sec});
 }
 
 initGTFS();

@@ -219,11 +219,9 @@ async function GTFS(db, zip = null) {
 		// linearize
 		stops = Array.from(stops.values());
 		stops.forEach((s,i) => s._index = i);
+		stops.forEach(s => s.neighbours.forEach(ns => ns.s = ns.s._index));
 		routes = Array.from(routes.values());
 		routes.forEach((r,i) => r._index = i);
-		
-		//routes = compactArray(routes);
-		//stops = compactArray(stops);
 		
 		return {range:me.dayRange(), stops:stops, routes:routes, shapes:shapes};
 	}
@@ -372,7 +370,7 @@ async function GTFS(db, zip = null) {
 		stops = compactArray(stops);
 
 		var result = {
-			start_date: days2string(startDay),
+			start_date: startDay,
 			services: services,
 			trips: trips,
 			stops: stops
@@ -857,7 +855,7 @@ function date2days(d) {
 	return Math.round(d);
 }
 function days2string(d) {
-	d = new Date(d*86400000+dayZero);
+	d = new Date((d+1)*86400000+dayZero);
 	return d.toISOString().substring(0,10);
 }
 
@@ -1049,7 +1047,7 @@ function route(start, end, data, startTime=null)
 		var h = (t % 24).toFixed(0);
 		return h+':'+('00'+m).slice(-2)
 	}
-	return {'path':path, 'html':html};
+	return {'path':path, 'html':html, 'perf_sec':performanceDuration/1000};
 }
 
 function compactArray(arr) {
@@ -1081,6 +1079,54 @@ function compactArray(arr) {
 	});
 	
 	return {indToKey:indToKey, keyToInd:keyToInd, data:newArr};
+}
+
+function expandArray(arr) {
+	var result = [];
+	arr.data.forEach(entry => {
+		var obj = {};
+		entry.forEach((e,i) => obj[arr.indToKey[i]] = e);
+		result.push(obj);
+	});
+	return result;
+}
+function expandArrayTo(arr, target) {
+	arr.data.forEach((entry,ti) => {
+		entry.forEach((e,i) => target[ti][arr.indToKey[i]] = e);
+	});
+}
+
+function initRoutes(common, day, dayNum)
+{
+	var routes = expandArray(common.routes);
+	var stops = expandArray(common.stops);
+	
+	expandArrayTo(day.stops, stops);
+	var services = expandArray(day.services);
+	var trips = expandArray(day.trips);
+	
+	stops.forEach(s => {
+		s.neighbours.forEach(ns => {
+			ns.stop = stops[ns.s];
+			delete ns.s;
+		});
+		s.trips.forEach(t => t[0] = trips[t[0]]);
+	});
+	trips.forEach(t => {
+		t.route = routes[t.route];
+		t.dates = services[t.service].dates;
+		t.stops = t.stops.map(s => stops[s]);
+	});
+	var result = {
+		day_diff: 0,
+		start_date: days2string(dayNum),
+		routes: routes,
+		services: services,
+		shapes: common.shapes,
+		stops: stops,
+		trips: trips
+	};
+	return result;
 }
 
 function sqr(v) { return v*v }
