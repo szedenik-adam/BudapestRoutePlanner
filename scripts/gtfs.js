@@ -1030,7 +1030,7 @@ function route(start, end, data, startTime=null)
 			'<tr><td>'+startTime+'</td><td>'+endTime+'</td><td class="text">'+step.text+'</td><td>'+duration+'</td></tr>'
 		].join(''));
 		console.log(startTime+' '+endTime+' '+step.text, duration);
-		if (step.points) path.push({p:step.points, c:step.color||'black', s:step.stops||[]});
+		if (step.points) path.push({p:step.points, c:step.color||'black', s:step.stops||[], t:[startTime,endTime]});
 	})
 	bestStop.arr.history.pop();
 	html.push('</table>');

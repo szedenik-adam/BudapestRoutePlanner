@@ -56,9 +56,14 @@ class MapUI {
 	var svgElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 	svgElement.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
 	svgElement.setAttribute('viewBox', '0 0 10 10');
+	svgElement.setAttribute('style', 'overflow: visible;"');
 	if(destMarker)
 		 svgElement.innerHTML = '<circle cx="5" cy="5" r="5" fill="white"/><circle cx="5" cy="5" r="4.9" fill="black"/><circle cx="5" cy="5" r="3.7" fill="white"/><circle cx="5" cy="5" r="2" fill="black"/>';
 	else svgElement.innerHTML = '<circle cx="5" cy="5" r="5" fill="white"/><circle cx="5" cy="5" r="4.9" fill="black"/><circle cx="5" cy="5" r="3.7" fill="white"/>';
+	svgElement.innerHTML += '<g class="timeG" visibility="hidden">\
+	<rect x="-5" y="10" width="20" height="8" rx="4" ry="4" stroke="black" stroke-width="1" fill="white"></rect>\
+	<text x="50%" y="14" dominant-baseline="middle" text-anchor="middle" font-weight="bold" font-size="0.5em" font-family="Calibri, sans-serif" class="timeText">00:00</text>\
+	</g>';
 	markerElement.appendChild(svgElement);
 	const marker = new maplibregl.Marker({
 		element: markerElement,
@@ -74,6 +79,13 @@ class MapUI {
 	marker.on('dragend', (e) => {
 		this.addRouteTask();
 	});
+	marker.setTime = function(time) {
+		const timeG = markerElement.getElementsByClassName('timeG');
+		timeG[0].setAttribute('visibility', time ? 'visible' : 'hidden');
+		if(!time) return;
+		const timeT = markerElement.getElementsByClassName('timeText');
+		timeT[0].innerHTML = time;
+	}
 	if(destMarker) this.rDestinationMarker = marker; else this.rSourceMarker = marker;
 	this.addRouteTask();
   }
@@ -104,6 +116,7 @@ class MapUI {
   addRouteTask()
   {
 	  if(this.worker == null) return;
+	  if(this.rDestinationMarker == null ||this.rSourceMarker == null) return;
 	  const task = {src:this.rSourceMarker.getLngLat(),dst:this.rDestinationMarker.getLngLat()};
 	  if(!this.routing) {
 		  this.routing = true;
@@ -265,6 +278,8 @@ class Route {
 		marker.addTo(this.mapUI.map);
 	}
 	drawRoute(route) {
+		if(this.mapUI.rSourceMarker) this.mapUI.rSourceMarker.setTime(route[0].t[0]);
+		if(this.mapUI.rDestinationMarker) this.mapUI.rDestinationMarker.setTime(route.at(-1).t[1]);
 		for(const stop of this.stopMarkers) stop.remove();
 		
 		this.clearFeatures();
