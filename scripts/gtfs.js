@@ -17,14 +17,15 @@ async function GTFS(db, zip = null) {
 	var data = {};
 	me.data = data;
 	
-	const progressMapper = new ProgressLinearizer('GTFS parsing', db); await progressMapper.load();
+	const progressMapper = (typeof ProgressLinearizer !== 'undefined') ? new ProgressLinearizer('GTFS parsing', db) : null;
+	if (progressMapper) {await progressMapper.load();}
 
 	var streamPromise = new Promise(function(resolve,reject){
 		const decoder = new TextDecoder();
 		var file = "", table=null, format=null, remainder=null;
 		var zipStream = zip.generateInternalStream({type:"uint8array"})
 		.on('data', function (data, metadata) {
-			progressMapper.update(metadata.percent/100);
+			if (progressMapper) {progressMapper.update(metadata.percent/100);}
 			function ParseLine2(line, format, me, decoder) {
 				line = decoder.decode(line);
 				var entry = Array(format.length);
@@ -371,6 +372,7 @@ async function GTFS(db, zip = null) {
 
 		var result = {
 			start_date: startDay,
+			c_range:common.range,
 			services: services,
 			trips: trips,
 			stops: stops
