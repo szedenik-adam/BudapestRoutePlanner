@@ -856,8 +856,11 @@ function date2days(d) {
 	d = (d-dayZero)/(86400000);
 	return Math.round(d);
 }
+function days2date(d) {
+	return new Date((d+1)*86400000+dayZero);
+}
 function days2string(d) {
-	d = new Date((d+1)*86400000+dayZero);
+	d = days2date(d);
 	return d.toISOString().substring(0,10);
 }
 
