@@ -259,7 +259,20 @@ class Route {
 		//this.mapUI.callAfterMapStyleLoaded(this, function(){this.source.setData(this.source._data)});
 		this.source.setData(this.source._data);
 	}
+	beginStopAdd() {
+		this.stopInd = -1;
+	}
 	addStop(pos) {
+		this.stopInd++;
+		if (this.stopInd < this.stopMarkers.length) {
+			this.stopMarkers[this.stopInd]._element.style.visibility = "visible";
+			const oldPos = this.stopMarkers[this.stopInd].getLngLat();
+			if (oldPos.lng == pos[0] && oldPos.lat == pos[1]) {
+				return;
+			}
+			this.stopMarkers[this.stopInd].setLngLat(pos);
+			return;
+		}
 		var markerElement = document.createElement('div');
 		markerElement.setAttribute('style', 'width:20px; height:20px; pointer-events: none;');
 		var svgElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -277,15 +290,20 @@ class Route {
 		this.stopMarkers.push(marker);
 		marker.addTo(this.mapUI.map);
 	}
+	endStopAdd() {
+		for(var i = this.stopInd+1; i < this.stopMarkers.length; i++) {
+			this.stopMarkers[i]._element.style.visibility = "hidden";
+		}
+	}
 	drawRoute(route) {
 		if(this.mapUI.rSourceMarker) this.mapUI.rSourceMarker.setTime(route[0].t[0]);
 		if(this.mapUI.rDestinationMarker) this.mapUI.rDestinationMarker.setTime(route.at(-1).t[1]);
-		for(const stop of this.stopMarkers) stop.remove();
 		
 		this.clearFeatures();
 		for(const part of route) this.addFeatureWithBorder(part.p, {'color':part.c});
 		this.commitChanges();
 		
+		this.beginStopAdd();
 		var lastStopPos = [0,0];
 		for(const part of route) {
 			for(const stop of part.s) {
@@ -295,6 +313,7 @@ class Route {
 				}
 			}
 		}
+		this.endStopAdd();
 	}
 }
 
