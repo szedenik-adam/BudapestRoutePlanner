@@ -37,7 +37,7 @@ async function initGTFS()
 	var result = route({lat:47.49990791402583,lon:19.080153604244394}, {lat:47.55545590531613,lon:19.043956781329452}, gtfsRoutes);
 	console.log('sending route to UI thread');
 	postMessage({'route':result});
-	postMessage({'info':timetableInfo.perf+', routing: '+result.perf_sec});
+	postMessage({'info':timetableInfo.perf+'\n - routing: '+result.perf_sec});
 }
 
 initGTFS();

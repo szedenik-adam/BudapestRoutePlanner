@@ -41,7 +41,7 @@ async function LoadTimeTable()
 	}
 
 	var initEndTime = performance.now();
-	const perfStr = `timetable init took ${((initEndTime - startTime)/1000).toFixed(3)} seconds (download: ${((downloadEndTime - startTime)/1000).toFixed(3)}, extract: ${((extractEndTime - downloadEndTime)/1000).toFixed(3)}, parse: ${((parseEndTime - extractEndTime)/1000).toFixed(3)}, ctor: ${((initEndTime - parseEndTime)/1000).toFixed(3)})`
+	const perfStr = `init took ${((initEndTime - startTime)/1000).toFixed(3)} seconds\n - download: ${((downloadEndTime - startTime)/1000).toFixed(3)}\n - extract: ${((extractEndTime - downloadEndTime)/1000).toFixed(3)}\n - parse: ${((parseEndTime - extractEndTime)/1000).toFixed(3)}\n - ctor: ${((initEndTime - parseEndTime)/1000).toFixed(3)}`
 	console.log(perfStr);
 	return {'routes':gtfsRoutes, 'perf':perfStr};
 }
