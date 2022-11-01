@@ -12,6 +12,7 @@
 	<script type="text/javascript" charset="utf-8" src="scripts/local.js"></script>
 	<script type="text/javascript" charset="utf-8" src="scripts/menuControl.js"></script>
 	<script type="text/javascript" charset="utf-8" src="scripts/route_ui.js"></script>
+	<script type="text/javascript" charset="utf-8" src="scripts/isochrone.js"></script>
 	<script>
 		var map, mapUI, route;
 		var gtfs, gtfsRoutes, gtfsWorker, progress;
@@ -42,6 +43,7 @@
 			}));
 
 			map.addControl(new MenuControl(),'top-left');
+			map.addControl(new IsochroneControl(),'top-left');
 
 			route = new Route(mapUI);
 			progress = new ProgressBar();
@@ -63,6 +65,9 @@
 				if('info' in e.data) {
 					const cElem = document.getElementById("coordinates");
 					cElem.innerHTML = e.data.info;
+				}
+				if('rowInd' in e.data && 'row' in e.data) {
+					receiveHeatmapMessage(e.data);
 				}
 			}
 			mapUI.setWorker(gtfsWorker);

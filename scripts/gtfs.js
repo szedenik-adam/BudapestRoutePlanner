@@ -897,9 +897,10 @@ function humanReadableSize(bytes) {
   return (bytes/Math.pow(1024, e)).toFixed(2)+' '+' KMGTP'.charAt(e)+'B';
 }
 
-function route(start, end, data, startTime=null)
+function route(start, end, data, options={})
 {
-	if(!startTime){ startTime = Date.now(); }
+	const retMode = options.ret ?? 'route';
+	var startTime = options.startTime ?? Date.now();
 	startTime -= (new Date(data.start_date));
 	startTime = startTime/1000 + 2*3600;
 	startTime -= data.day_diff * 86400;
@@ -995,7 +996,6 @@ function route(start, end, data, startTime=null)
 		}
 		data.last = {start:start, startTime:startTime};
 	} else {
-		console.log('using cached route data');
 		data.stops.forEach(function (stop) {
 			stop.endDistance = Math.sqrt(sqr((end.lon-stop.lon)*71.6) + sqr((end.lat-stop.lat)*111.3));
 			stop.endDuration = stop.endDistance/walkSpeed;
@@ -1019,6 +1019,9 @@ function route(start, end, data, startTime=null)
 	})
 
 	var performanceDuration = (new Date()) - performanceStart;
+	if(retMode == 'duration'){
+		return bestTime - startTime;
+	}
 
 	var html = [
 		'<p>Found route in <b>'+performanceDuration+' ms</b></p>',

@@ -49,4 +49,11 @@ onmessage = function(e) {
 		console.log('sending route to UI thread');
 		postMessage({'route':result});
 	}
+	else if ('rowInd' in e.data && 'src' in e.data && 'row' in e.data) {
+		e.data.row.forEach((dst, i) => {
+			var result = route({lat:e.data.src.lat,lon:e.data.src.lng}, {lat:dst.lat,lon:dst.lng}, gtfsRoutes, {ret:'duration',startTime:e.data.startTime});
+			e.data.row[i] = result;
+		});
+		postMessage({rowInd:e.data.rowInd, row:e.data.row});
+	}
 }

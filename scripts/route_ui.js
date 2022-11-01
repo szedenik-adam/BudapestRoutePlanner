@@ -315,6 +315,12 @@ class Route {
 		}
 		this.endStopAdd();
 	}
+	clear() {
+		this.clearFeatures();
+		this.commitChanges();
+		this.beginStopAdd();
+		this.endStopAdd();
+	}
 }
 
 class ProgressBar {
