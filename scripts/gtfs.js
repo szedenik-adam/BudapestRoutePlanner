@@ -1011,7 +1011,7 @@ function route(start, end, data, options={})
 				duration:stop.endDuration,
 				points:[[stop.lon,stop.lat], [end.lon,end.lat]],
 				color:'gray',
-				end:stop.arr.time
+				end:stopTotalTime
 			}
 		}
 	})
