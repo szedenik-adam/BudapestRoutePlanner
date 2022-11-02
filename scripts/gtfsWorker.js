@@ -5,6 +5,7 @@ var timetable_url = 'https://bprp.pages.dev/timetable/';
 postMessage('initializing');
 
 importScripts('progressLinearizer.js');
+importScripts('walk_route.js');
 importScripts('gtfs.js');
 importScripts('timetableLoader.js');
 try{importScripts('local.js');}catch(e){}

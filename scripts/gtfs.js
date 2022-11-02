@@ -914,10 +914,9 @@ function route(start, end, data, options={})
 		data.stops.forEach(function (stop) {
 			stop.checked = false;
 			
-			stop.startDistance = Math.sqrt(sqr((start.lon-stop.lon)*71.6) + sqr((start.lat-stop.lat)*111.3));
-			stop.endDistance   = Math.sqrt(sqr((  end.lon-stop.lon)*71.6) + sqr((  end.lat-stop.lat)*111.3));
-			stop.endDuration   = stop.endDistance/walkSpeed;
-			var duration = stop.startDistance/walkSpeed;
+			var duration;
+			[stop.startDistance, duration] = calcWalkDistDur(start, stop);
+			[stop.endDistance, stop.endDuration] = calcWalkDistDur(end, stop);
 
 			var time = startTime + duration + transferWait;
 			stop.arr = {time:time, history:[{
@@ -997,8 +996,7 @@ function route(start, end, data, options={})
 		data.last = {start:start, startTime:startTime};
 	} else {
 		data.stops.forEach(function (stop) {
-			stop.endDistance = Math.sqrt(sqr((end.lon-stop.lon)*71.6) + sqr((end.lat-stop.lat)*111.3));
-			stop.endDuration = stop.endDistance/walkSpeed;
+			[stop.endDistance, stop.endDuration] = calcWalkDistDur(end, stop);
 		});
 	}
 
