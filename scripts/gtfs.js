@@ -902,7 +902,7 @@ function route(start, end, data, options={})
 	const retMode = options.ret ?? 'route';
 	var startTime = options.startTime ?? Date.now();
 	startTime -= (new Date(data.start_date));
-	startTime = startTime/1000 + 2*3600;
+	startTime = startTime/1000 + (new Date().getTimezoneOffset())*-60;
 	startTime -= data.day_diff * 86400;
 				
 	var performanceStart = new Date();
