@@ -4,8 +4,8 @@ var m_heatmap = {rowCount:0, downScale:0, canvas:null, palette:'discrete', resam
 function createHeatmap()
 {
 	const downScale = 10;
-	const mapWidth = map.getCanvas().width;
-	const mapHeight = map.getCanvas().height;
+	const mapWidth = Math.ceil(map.getCanvas().width / map.getPixelRatio());
+	const mapHeight = Math.ceil(map.getCanvas().height / map.getPixelRatio());
 	const imgWidth = Math.ceil(mapWidth/downScale);
 	const imgHeight = Math.ceil(mapHeight/downScale);
 	const startTime = Date.now();
@@ -202,8 +202,8 @@ function hue2rgb(p, q, t){
 
 function showImage(imgUrl)
 {
-	const mapWidth = map.getCanvas().width;
-	const mapHeight = map.getCanvas().height;
+	const mapWidth = Math.ceil(map.getCanvas().width / map.getPixelRatio());
+	const mapHeight = Math.ceil(map.getCanvas().height / map.getPixelRatio());
 
 	const srcCoords = [
 		Object.values(map.unproject([0, 0])),
