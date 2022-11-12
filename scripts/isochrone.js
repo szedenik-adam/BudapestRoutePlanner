@@ -1,5 +1,5 @@
 
-var m_heatmap = {rowCount:0, downScale:0, canvas:null, palette:'discrete', resampling:'linear'};
+var m_heatmap = {rowCount:0, downScale:0, canvas:null, palette:'discrete', resampling:'linear', startTime:null};
 
 function createHeatmap()
 {
@@ -8,7 +8,7 @@ function createHeatmap()
 	const mapHeight = Math.ceil(map.getCanvas().height / map.getPixelRatio());
 	const imgWidth = Math.ceil(mapWidth/downScale);
 	const imgHeight = Math.ceil(mapHeight/downScale);
-	const startTime = Date.now();
+	m_heatmap.startTime = Date.now();
 
 	m_heatmap.rowCount = imgHeight;
 	m_heatmap.downScale = downScale;
@@ -18,6 +18,13 @@ function createHeatmap()
 	}
 	m_heatmap.canvas.width = imgWidth;
 	m_heatmap.canvas.height = imgHeight;
+	
+	m_heatmap.srcCoords = [
+		Object.values(map.unproject([0, 0])),
+		Object.values(map.unproject([imgWidth*downScale, 0])),
+		Object.values(map.unproject([imgWidth*downScale, imgHeight*downScale])),
+		Object.values(map.unproject([0, imgHeight*downScale])),
+	];
 
 	var mx = Array.from(Array(imgHeight), () => Array.from(Array(imgWidth)));
 	const mapBounds = map.getBounds();
@@ -26,7 +33,7 @@ function createHeatmap()
 		for(var x = 0; x < row.length; x++) {
 			row[x] = map.unproject([x*downScale+downScale/2, y*downScale+downScale/2]);
 		}
-		const msg = {src:(mapUI.rSourceMarker) ? mapUI.rSourceMarker.getLngLat() : map.getCenter(), rowInd:y, row:row, startTime:startTime};
+		const msg = {src:(mapUI.rSourceMarker) ? mapUI.rSourceMarker.getLngLat() : map.getCenter(), rowInd:y, row:row, startTime:m_heatmap.startTime};
 		mapUI.worker.postMessage(msg);
 	}
 }
@@ -104,21 +111,15 @@ function receiveHeatmapMessage(msg)
 	if(msg.rowInd == m_heatmap.rowCount-1) {
 		var dataURL = canvas.toDataURL();
 
-		const srcCoords = [
-			Object.values(map.unproject([0, 0])),
-			Object.values(map.unproject([imgWidth*downScale, 0])),
-			Object.values(map.unproject([imgWidth*downScale, imgHeight*downScale])),
-			Object.values(map.unproject([0, imgHeight*downScale])),
-		];
 		const source = map.getSource('heatmap');
 		if(!source) {
 			map.addSource('heatmap', {
 				'type': 'image',
 				'url': dataURL,
-				'coordinates': srcCoords
+				'coordinates': m_heatmap.srcCoords
 			});
 		} else {
-			source.updateImage({url: dataURL, coordinates: srcCoords});
+			source.updateImage({url: dataURL, coordinates: m_heatmap.srcCoords});
 			console.log('source', source);
 		}
 		var layer = map.getLayer('heatmap-layer');
@@ -137,6 +138,9 @@ function receiveHeatmapMessage(msg)
 				}
 			});
 		}
+		var calcDuration = (new Date()) - m_heatmap.startTime;
+		const cElem = document.getElementById("coordinates");
+		cElem.innerHTML = 'icm calc took '+Math.round(calcDuration/100)/10+' s';
 	}
 }
 
