@@ -908,6 +908,13 @@ function route(start, end, data, options={})
 	var performanceStart = new Date();
 	var endTime = startTime+86400;
 	
+	if('lands' in data) {
+		if(!('lands' in start)){
+			if(('last' in data) && start.lon == data.last.start.lon && start.lat == data.last.start.lat && 'lands' in data.last.start) { start.lands=data.last.start.lands; }
+			else { clusterStops([start], data.lands); }
+		}
+		if(!('lands' in end)){clusterStops([end], data.lands);}
+	}
 
 	if(!('last' in data) || start.lon != data.last.start.lon || start.lat != data.last.start.lat || Math.floor(startTime/60) != Math.floor(data.last.startTime/60))
 	{
@@ -1130,8 +1137,10 @@ function initRoutes(common, day, dayNum)
 		services: services,
 		shapes: common.shapes,
 		stops: stops,
-		trips: trips
+		trips: trips,
+		lands: []
 	};
+	if('lands' in common) result.lands = common.lands; else delete result.lands;
 	return result;
 }
 
