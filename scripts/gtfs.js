@@ -1124,6 +1124,7 @@ function initRoutes(common, day, dayNum)
 			delete ns.s;
 		});
 		s.trips.forEach(t => t[0] = trips[t[0]]);
+		if('lands' in s && (typeof s.lands)=='string') s.lands = BigInt(s.lands);
 	});
 	trips.forEach(t => {
 		t.route = routes[t.route];
