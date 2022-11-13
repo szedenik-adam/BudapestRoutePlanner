@@ -139,30 +139,18 @@ function AddBridgesToRoutes(bridges, gtfsRoutes, neighboursAsIndexes=false)
 	gtfsRoutes.lands = bridges.lands;
 
 	if('bridgeLand' in bridges && 'bridgeEndpoints' in bridges) {
-		AddBridgesToStops(bridges, gtfsRoutes.stops);
-		
-		if(neighboursAsIndexes) {
-			for(var i = gtfsRoutes.stops.length - bridges.bridgeEndpoints.length; i < gtfsRoutes.stops.length; i++)
-			{
-				gtfsRoutes.stops[i]._id = i;
-				gtfsRoutes.stops[i]._index = i;
-			}
-			for(var i = gtfsRoutes.stops.length - bridges.bridgeEndpoints.length; i < gtfsRoutes.stops.length; i++)
-			{
-				gtfsRoutes.stops[i].neighbours.forEach(ns => ns.stop = ns.stop._index);
-			}
-		}
+		AddBridgesToStops(bridges, gtfsRoutes.stops, neighboursAsIndexes);
 	}
 }
 
-function AddBridgesToStops(bridges, stops)
+function AddBridgesToStops(bridges, stops, neighboursAsIndexes)
 {
 	console.log('bridgeEndpoints',bridges.bridgeEndpoints);
 	var bridgeStops = bridges.bridgeEndpoints;
 
 	clusterStops(bridgeStops, bridges.lands);
 
-	var mergedBridgeStops = [];
+	var mergedBridgeStops = [], nextStopInd=stops.length;
 
 	bridgeStops.forEach(bs => {
 		for(var si=0; si<stops.length; si++) {
@@ -175,11 +163,16 @@ function AddBridgesToStops(bridges, stops)
 				break;
 			}
 		}
+		if(neighboursAsIndexes && !('mergeTo' in bs)) {
+			bs._index = nextStopInd;
+			bs._id = nextStopInd++;
+		}
 	});
 		
 	bridgeStops.forEach(bs => {
 		bs.neighbours = bs.neighbours.map(nInd => {
-			const neighbour = ('mergeTo' in bridgeStops[nInd]) ? stops[bridgeStops[nInd]['mergeTo']] : bridgeStops[nInd];
+			var neighbour = ('mergeTo' in bridgeStops[nInd]) ? stops[bridgeStops[nInd]['mergeTo']] : bridgeStops[nInd];
+			if(neighboursAsIndexes) {neighbour = neighbour._index;}
 			return {stop:neighbour, dist:Math.sqrt(sqr((neighbour.lon-bs.lon)*71.6) + sqr((neighbour.lat-bs.lat)*111.3))};
 			});
 		bs.name = 'Híd';
@@ -197,8 +190,8 @@ function AddBridgesToStops(bridges, stops)
 			const distSqr = sqr((stop.lon-bs.lon)*71.6) + sqr((stop.lat-bs.lat)*111.3);
 			if(distSqr < 0.3*0.3) {
 				const dist = Math.sqrt(distSqr);
-				stop.neighbours.push({stop:bs, dist:dist});
-				bs.neighbours.push({stop:stop, dist:dist});
+				stop.neighbours.push({stop:(neighboursAsIndexes) ? bs._index : bs, dist:dist});
+				bs.neighbours.push({stop:(neighboursAsIndexes) ? stop._index : stop, dist:dist});
 			} else if(distSqr < 1*1) {
 				mediumRange.push({stop:stop, dist:distSqr});
 			}
@@ -207,7 +200,7 @@ function AddBridgesToStops(bridges, stops)
 			mediumRange.forEach(ns => {
 				ns.dist = Math.sqrt(ns.dist);
 				bs.neighbours.push(ns);
-				ns.stop.neighbours.push({stop:bs, dist:ns.dist});
+				ns.stop.neighbours.push({stop:(neighboursAsIndexes) ? bs._index : bs, dist:ns.dist});
 			});
 		}*/
 	});
