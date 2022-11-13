@@ -163,17 +163,27 @@ function AddBridgesToStops(bridges, stops, neighboursAsIndexes)
 				break;
 			}
 		}
-		if(neighboursAsIndexes && !('mergeTo' in bs)) {
-			bs._index = nextStopInd;
-			bs._id = nextStopInd++;
+		if(neighboursAsIndexes) {
+			if(('mergeTo' in bs)) {
+				bs._index = bs.mergeTo;
+				bs._id = bs.mergeTo;
+			}
+			else {
+				bs._index = nextStopInd;
+				bs._id = nextStopInd++;
+			}
 		}
 	});
 		
 	bridgeStops.forEach(bs => {
 		bs.neighbours = bs.neighbours.map(nInd => {
 			var neighbour = ('mergeTo' in bridgeStops[nInd]) ? stops[bridgeStops[nInd]['mergeTo']] : bridgeStops[nInd];
-			if(neighboursAsIndexes) {neighbour = neighbour._index;}
-			return {stop:neighbour, dist:Math.sqrt(sqr((neighbour.lon-bs.lon)*71.6) + sqr((neighbour.lat-bs.lat)*111.3))};
+			var result = {};
+			if(neighboursAsIndexes) {
+				result.s = neighbour._index;
+			} else {result.stop = neighbour;}
+			result.dist=Math.sqrt(sqr((neighbour.lon-bs.lon)*71.6) + sqr((neighbour.lat-bs.lat)*111.3));
+			return result;
 			});
 		bs.name = 'Híd';
 		bs.trips = [];
@@ -190,8 +200,13 @@ function AddBridgesToStops(bridges, stops, neighboursAsIndexes)
 			const distSqr = sqr((stop.lon-bs.lon)*71.6) + sqr((stop.lat-bs.lat)*111.3);
 			if(distSqr < 0.3*0.3) {
 				const dist = Math.sqrt(distSqr);
-				stop.neighbours.push({stop:(neighboursAsIndexes) ? bs._index : bs, dist:dist});
-				bs.neighbours.push({stop:(neighboursAsIndexes) ? stop._index : stop, dist:dist});
+				if(neighboursAsIndexes) {
+					stop.neighbours.push({s:bs._index, dist:dist});
+					bs.neighbours.push({s:stop._index, dist:dist});
+				} else {
+					stop.neighbours.push({stop:bs, dist:dist});
+					bs.neighbours.push({stop:stop, dist:dist});
+				}
 			} else if(distSqr < 1*1) {
 				mediumRange.push({stop:stop, dist:distSqr});
 			}
