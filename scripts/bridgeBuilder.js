@@ -130,7 +130,7 @@ function calculateBridges(geoJson)
 	return {lands:lands, bridgeLand:bridgeMultiPoly, bridgeEndpoints:bridgeStops, bridgeStopPolys:bridgeStopPolys};
 }
 
-function AddBridgesToRoutes(bridges, gtfsRoutes)
+function AddBridgesToRoutes(bridges, gtfsRoutes, neighboursAsIndexes=false)
 {
 	if('bridgeLand') {
 		bridges.lands.push(bridges.bridgeLand);
@@ -140,6 +140,18 @@ function AddBridgesToRoutes(bridges, gtfsRoutes)
 
 	if('bridgeLand' in bridges && 'bridgeEndpoints' in bridges) {
 		AddBridgesToStops(bridges, gtfsRoutes.stops);
+		
+		if(neighboursAsIndexes) {
+			for(var i = gtfsRoutes.stops.length - bridges.bridgeEndpoints.length; i < gtfsRoutes.stops.length; i++)
+			{
+				gtfsRoutes.stops[i]._id = i;
+				gtfsRoutes.stops[i]._index = i;
+			}
+			for(var i = gtfsRoutes.stops.length - bridges.bridgeEndpoints.length; i < gtfsRoutes.stops.length; i++)
+			{
+				gtfsRoutes.stops[i].neighbours.forEach(ns => ns.stop = ns.stop._index);
+			}
+		}
 	}
 }
 
@@ -167,7 +179,7 @@ function AddBridgesToStops(bridges, stops)
 		
 	bridgeStops.forEach(bs => {
 		bs.neighbours = bs.neighbours.map(nInd => {
-			const neighbour = ('mergeTo' in bridgeStops[nInd]) ? stops[bridgeStops[nInd]['mergeTo']] : bridgeStops[nInd]
+			const neighbour = ('mergeTo' in bridgeStops[nInd]) ? stops[bridgeStops[nInd]['mergeTo']] : bridgeStops[nInd];
 			return {stop:neighbour, dist:Math.sqrt(sqr((neighbour.lon-bs.lon)*71.6) + sqr((neighbour.lat-bs.lat)*111.3))};
 			});
 		bs.name = 'Híd';
