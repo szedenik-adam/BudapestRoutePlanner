@@ -12,6 +12,8 @@ try{importScripts('local.js');}catch(e){}
 importScripts('external/jszip.min.js');
 importScripts('external/idb.min.js');
 
+importScripts('external/turf.min.js');
+
 var gtfsRoutes, db;
 
 async function initGTFS()
@@ -51,8 +53,9 @@ onmessage = function(e) {
 		postMessage({'route':result});
 	}
 	else if ('rowInd' in e.data && 'src' in e.data && 'row' in e.data) {
+		var src = {lat:e.data.src.lat,lon:e.data.src.lng};
 		e.data.row.forEach((dst, i) => {
-			var result = route({lat:e.data.src.lat,lon:e.data.src.lng}, {lat:dst.lat,lon:dst.lng}, gtfsRoutes, {ret:'duration',startTime:e.data.startTime});
+			var result = route(src, {lat:dst.lat,lon:dst.lng}, gtfsRoutes, {ret:'duration',startTime:e.data.startTime});
 			e.data.row[i] = result;
 		});
 		postMessage({rowInd:e.data.rowInd, row:e.data.row});
