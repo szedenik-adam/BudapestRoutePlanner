@@ -36,10 +36,14 @@ function createHeatmap()
 		const msg = {src:(mapUI.rSourceMarker) ? mapUI.rSourceMarker.getLngLat() : map.getCenter(), rowInd:y, row:row, startTime:m_heatmap.startTime};
 		mapUI.worker.postMessage(msg);
 	}
+	progress.setTitle("Isochrone map calculation").setProgress(0).show();
 }
 
 function receiveHeatmapMessage(msg)
 {
+	progress.setProgress((msg.rowInd+1)/m_heatmap.rowCount);
+	if(msg.rowInd+1 == m_heatmap.rowCount) { progress.hide(); }
+
 	const imgWidth = msg.row.length;
 	const imgHeight = m_heatmap.rowCount;
 	const downScale = m_heatmap.downScale;
