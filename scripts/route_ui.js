@@ -325,9 +325,9 @@ class Route {
 
 class ProgressBar {
 	constructor () {}
-	show(){document.getElementById("bottomContainer").classList=[""];}
-	hide(){document.getElementById("bottomContainer").classList=["hidden"];}
-	isVisible(){return !document.getElementById("bottomContainer").classList.contains("hidden");}
-	setTitle(title){document.getElementById("progressTitle").textContent=title;}
-	setProgress(progress){document.getElementById("progressBar").value=progress*100;}
+	show(){document.getElementById("bottomContainer").classList=[""]; return this;}
+	hide(){document.getElementById("bottomContainer").classList=["hidden"]; return this;}
+	isVisible(){return !document.getElementById("bottomContainer").classList.contains("hidden"); return this;}
+	setTitle(title){document.getElementById("progressTitle").textContent=title; return this;}
+	setProgress(progress){document.getElementById("progressBar").value=progress*100; return this;}
 }
