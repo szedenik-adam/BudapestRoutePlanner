@@ -11,10 +11,14 @@ importScripts('timetableLoader.js');
 try{importScripts('local.js');}catch(e){}
 importScripts('external/jszip.min.js');
 importScripts('external/idb.min.js');
-
 importScripts('external/turf.min.js');
 
-var gtfsRoutes, db;
+importScripts('external/long.js');
+importScripts('external/s2geometry.min.js');
+importScripts('s2_extension.js');
+importScripts('stop_worker.js');
+
+var gtfsRoutes, db, stopInfoProvider = null;
 
 async function initGTFS()
 {
@@ -41,6 +45,8 @@ async function initGTFS()
 	console.log('sending route to UI thread');
 	postMessage({'route':result});
 	postMessage({'info':timetableInfo.perf+'\n - routing: '+result.perf_sec});
+	
+	stopInfoProvider = new StopInfoProvider(gtfsRoutes.stops, 13);
 }
 
 initGTFS();
@@ -59,5 +65,22 @@ onmessage = function(e) {
 			e.data.row[i] = result;
 		});
 		postMessage({rowInd:e.data.rowInd, row:e.data.row});
+	}
+	else if('task' in e.data) {
+		if(e.data.task=='s2') {
+			var cell = S2_PointToCell([e.data.lng, e.data.lat]);
+			postMessage({task:'s2', cell:cell});
+		}
+		if(e.data.task=='s2bb') {
+			var cells, notNeededCells = new Set();
+			if(stopInfoProvider) {
+				var stopInfos = stopInfoProvider.getStopsForArea(e.data.bb);
+				cells = stopInfos.cells;
+				notNeededCells = stopInfos.notNeededCells;
+			} else {
+				cells = S2_CoverPolygon(e.data.bb);
+			}
+			postMessage({task:'s2bb', cells:cells, multipolygon:turf.multiPolygon(Array.from(cells.values()).map(cell=>cell.geometry.coordinates)), notNeededCells:notNeededCells});
+		}
 	}
 }

@@ -13,8 +13,11 @@
 	<script type="text/javascript" charset="utf-8" src="scripts/menuControl.js"></script>
 	<script type="text/javascript" charset="utf-8" src="scripts/route_ui.js"></script>
 	<script type="text/javascript" charset="utf-8" src="scripts/isochrone.js"></script>
+	<script type="text/javascript" charset="utf-8" src="scripts/external/decomp.js"></script>
+	<script type="text/javascript" charset="utf-8" src="scripts/debug_ui.js"></script>
+	<script type="text/javascript" charset="utf-8" src="scripts/stop_ui.js"></script>
 	<script>
-		var map, mapUI, route;
+		var map, mapUI, stopDrawUI, route;
 		var gtfs, gtfsRoutes, gtfsWorker, progress;
 
 		function onLoad()
@@ -23,8 +26,9 @@
 				container: 'map',
 				style: style,
 				center: [19.06086, 47.52918],
-				zoom: 15
+				zoom: 12
 			});
+			map.touchZoomRotate.disableRotation();
 
 			mapUI = new MapUI(map);
 			mapUI.addMarkerOnClick();
@@ -41,6 +45,8 @@
 			}).on('trackuserlocationend', function() {
 				mapUI.tracking(false);
 			}));
+			
+			stopDrawUI = new StopDrawUI(map);
 
 			map.addControl(new MenuControl(),'top-left');
 			map.addControl(new IsochroneControl(),'top-left');
@@ -68,6 +74,15 @@
 				}
 				if('rowInd' in e.data && 'row' in e.data) {
 					receiveHeatmapMessage(e.data);
+				}
+				if('stops' in e.data) {
+					receiveStopsForDrawing(e.data.stops);
+				}
+				if('task' in e.data && e.data.task == 's2') {
+					receiveGeoJsonForDrawing(e.data.cell);
+				}
+				if('task' in e.data && e.data.task == 's2bb') {
+					stopDrawUI.updateStops(e.data);
 				}
 			}
 			mapUI.setWorker(gtfsWorker);
