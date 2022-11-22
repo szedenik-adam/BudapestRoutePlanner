@@ -6,7 +6,8 @@ class StopInfoProvider {
 		this.stops = new Map();
 		for(const stop of stops) {
 			if(stop.trips.length == 0) continue;
-			const stopEntry = [stop.lon, stop.lat];
+			var colors = new Set(); for(var ti=0;ti<Math.min(30,stop.trips.length);ti++){ colors.add(stop.trips[ti][0].route.color[0]); }
+			const stopEntry = [stop.lon, stop.lat, Array.from(colors)];
 			const cellKey = S2.latLngToKey(stop.lon, stop.lat, s2level);
 			var cellStops = this.stops.get(cellKey);
 			if(cellStops === undefined) {
