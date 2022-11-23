@@ -101,6 +101,7 @@ class StopDrawUI {
 				}
 				
 				svgElement.innerHTML = '<circle cx="5" cy="5" r="3.2" fill="black"/>';
+				if(stop[3]!=null) svgElement.innerHTML += '<polygon points="2.2,4 7.8,4 5,0" fill="black" transform="rotate('+stop[3]+' 5 5)" />';
 				const arcs = drawColoredCircle({cX:5,cY:5,r:2.9,colors:stop[2].map(color=>'#'+color)});
 				svgElement.appendChild(arcs);
 				svgElement.innerHTML += '<circle cx="5" cy="5" r="1.7" fill="white" stroke="black" stroke-width="0.3"/>';
