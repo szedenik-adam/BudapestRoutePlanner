@@ -194,12 +194,14 @@ async function GTFS(db, zip = null) {
 		const s_name_pos = me.stops_f.get('stop_name');
 		const s_lat_pos = me.stops_f.get('stop_lat');
 		const s_lon_pos = me.stops_f.get('stop_lon');
+		const s_dir_pos = me.stops_f.get('stop_direction');
 		data.stops.forEach(s => {
 			stops.set(s[s_id_pos], {
 				name:s[s_name_pos],
 				lat:s[s_lat_pos],
 				lon:s[s_lon_pos],
 				neighbours:[],
+				dir:s[s_dir_pos] ?? null,
 				_id: s[s_id_pos]
 			});
 		});
@@ -458,11 +460,13 @@ async function GTFS(db, zip = null) {
 		const s_name_pos = me.stops_f.get('stop_name');
 		const s_lat_pos = me.stops_f.get('stop_lat');
 		const s_lon_pos = me.stops_f.get('stop_lon');
+		const s_dir_pos = me.stops_f.get('stop_direction');
 		data.stops.forEach(s => {
 			stops.set(s[s_id_pos], {
 				name:s[s_name_pos],
 				lat:s[s_lat_pos],
-				lon:s[s_lon_pos]
+				lon:s[s_lon_pos],
+				dir:s[s_dir_pos] ?? null
 			});
 		});
 
@@ -649,6 +653,7 @@ var formats = ([
 			{id:'parent_station',type:'string',required:false,details:'For stops that are physically located inside stations, this field identifies the station associated with the stop. To use this field, stops.txt must also contain a row where this stop ID is assigned location type=1.'},
 			{id:'stop_timezone',type:'string',required:false,details:'Contains the timezone in which this stop or station is located. Please refer to Wikipedia List of Timezones for a list of valid values. If omitted, the stop should be assumed to be located in the timezone specified by agency_timezone in agency.txt.'},
 			{id:'wheelchair_boarding',type:'int',required:false,details:'Identifies whether wheelchair boardings are possible from the specified stop or station. The field can have the following values:'},
+			{id:'stop_direction',type:'int',required:false,details:'Contains the stop\'s departure direction in degrees.'},
 		]
 	},{
 		id:'routes',
@@ -913,7 +918,7 @@ function route(start, end, data, options={})
 			if(('last' in data) && start.lon == data.last.start.lon && start.lat == data.last.start.lat && 'lands' in data.last.start) { start.lands=data.last.start.lands; }
 			else { clusterStops([start], data.lands); }
 		}
-		if(!('lands' in end)){clusterStops([end], data.lands);}
+		if(!('lands' in end)){ clusterStops([end], data.lands); }
 	}
 
 	if(!('last' in data) || start.lon != data.last.start.lon || start.lat != data.last.start.lat || Math.floor(startTime/60) != Math.floor(data.last.startTime/60))
