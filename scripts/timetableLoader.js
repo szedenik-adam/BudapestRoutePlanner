@@ -25,10 +25,10 @@ async function LoadTimeTable()
 			downloadEndTime += d2EndTime - d2StartTime;
 			const zipContents = await ExtractZips(zipBlobs);
 			const e2EndTime = performance.now();
-			extractEndTime += e2EndTime - d2EndTime;
+			extractEndTime += e2EndTime - d2StartTime;
 			const commonObjs = ParseJsons(zipContents);
 			const p2EndTime = performance.now();
-			parseEndTime += p2EndTime - e2EndTime;
+			parseEndTime += p2EndTime - d2StartTime;
 			objects[0] = commonObjs[0];
 			if(objects[0].range[0] != objects[1].c_range[0] || objects[0].range[1] != objects[1].c_range[1])
 			{
@@ -52,10 +52,10 @@ async function DownloadFiles(urls, progresses, fetchParams={})
 		progresses.unshift([0,0]);
 		var downloaded = 0;
 		var chunks = [];
-		var response = await fetch(urls[ind], fetchParams);  //, );
+		var response = await fetch(urls[ind], fetchParams);
 		const reader = response.body.getReader();
 
-		const total = response.headers.get('Content-Length');
+		const total = parseInt(response.headers.get('Content-Length'));
 
 		while(true) {
 		  const {done, value} = await reader.read();
@@ -67,7 +67,7 @@ async function DownloadFiles(urls, progresses, fetchParams={})
 		  progresses[ind]=[downloaded, total];
 		  const wholeDownloaded = progresses.reduce((prevVal,curVal)=>prevVal+curVal[0],0);
 		  const wholeTotal = progresses.reduce((prevVal,curVal)=>prevVal+curVal[1],0);
-		  postMessage({'progress':[`Timetable downloading ${humanReadableSize(wholeDownloaded)}/${humanReadableSize(total)}`, wholeDownloaded / total]});
+		  postMessage({'progress':[`Timetable downloading ${humanReadableSize(wholeDownloaded)}/${humanReadableSize(wholeTotal)}`, wholeDownloaded / wholeTotal]});
 		}
 
 		return new Blob(chunks);
