@@ -21,6 +21,10 @@ class StopDrawUI {
 	this.registerMapEventHandler('move', function(e){
 		thisref.onMapMove.call(thisref, e);
 	});
+	
+	this.clickedSvg = null;
+	
+	this.observer = new IntersectionObserver((entries, observer)=>thisref.handleIntersect(entries, observer), {root: null,rootMargin: "0px",threshold: 0});
   }
   registerMapEventHandler(eventName, eventHandler) {
 	this.registeredEventHandlers.push(eventName, eventHandler);
@@ -95,6 +99,7 @@ class StopDrawUI {
 					marker = new maplibregl.Marker({
 						element: markerElement
 					});
+					this.observer.observe(markerElement);
 				} else {
 					marker = this.ununsedStopMarkers.pop();
 					svgElement = marker.getElement().children[0];
@@ -105,7 +110,7 @@ class StopDrawUI {
 				const arcs = drawColoredCircle({cX:5,cY:5,r:2.9,colors:stop[2].map(color=>'#'+color)});
 				svgElement.appendChild(arcs);
 				svgElement.innerHTML += '<circle cx="5" cy="5" r="1.7" fill="white" stroke="black" stroke-width="0.3"/>';
-				svgElement.dataset.stopId = 11;
+				svgElement.dataset.stopId = stop[4];
 				
 				marker.setLngLat(stop.slice(0,2));
 				if(showMarkers) marker.addTo(this.map);
@@ -155,8 +160,30 @@ class StopDrawUI {
 	  }
   }
   markerClick(div, event) {
+	  if(this.clickedSvg && this.clickedSvg.innerHTML.includes('animate')) {
+		  this.clickedSvg.children[0].remove();
+	  }
 	  console.log('stop marker click', this, div, event, div.dataset.stopId);
 	  event.stopPropagation();
+	  this.clickedSvg = div;
+	  mapUI.worker.postMessage({task:'stopInfo', stopId:div.dataset.stopId});
+  }
+  handleIntersect(entries, observer) {
+	  //console.log('Intersect', entries, observer);
+  }
+  showStopDetailedInfo(stop) {
+	  const div = document.getElementById('stopInfoContent');
+	  div.children[0].textContent = stop.name;
+	  div.parentNode.classList.remove('hidden');
+	  console.log('clickedSvg',this.clickedSvg);
+	  if(!this.clickedSvg.innerHTML.includes('animate')) {
+		this.clickedSvg.innerHTML = 
+		   `<circle cx="5" cy="5" r="3.2" fill="yellow">
+		      <animate attributeName="r" calcMode="discrete" values="3.2;3.56;3.92;4.27;4.63;4.99;5.35;5.71;6.06;6.42;6.78;7.14;7.49;7.85;8.21;8.57;8.93;9.28;9.64;10" dur="1.5s" begin="0s" repeatCount="indefinite"/>
+			  <animate attributeName="opacity" calcMode="discrete" values="1;0.96;0.92;0.87;0.83;0.79;0.75;0.71;0.66;0.62;0.58;0.54;0.49;0.45;0.41;0.37;0.33;0.28;0.24;0.2" dur="1.5s" begin="0s" repeatCount="indefinite"/>,
+			</circle>` + this.clickedSvg.innerHTML;
+		this.clickedSvg.querySelectorAll("animate").forEach((element) => { element.beginElement(); });
+	  }
   }
 }
 

@@ -4,10 +4,10 @@ class StopInfoProvider {
 		this.lastSentCells=new Set();
 		this.s2level=s2level;
 		this.stops = new Map();
-		for(const stop of stops) {
-			if(stop.trips.length == 0) continue;
+		stops.forEach((stop,stopInd) => {
+			if(stop.trips.length == 0) return;
 			var colors = new Set(); for(var ti=0;ti<stop.trips.length;ti++){ colors.add(stop.trips[ti][0].route.color[0]); }
-			const stopEntry = [stop.lon, stop.lat, Array.from(colors), stop.dir];
+			const stopEntry = [stop.lon, stop.lat, Array.from(colors), stop.dir, stopInd];
 			const cellKey = S2.latLngToKey(stop.lon, stop.lat, s2level);
 			var cellStops = this.stops.get(cellKey);
 			if(cellStops === undefined) {
@@ -15,7 +15,7 @@ class StopInfoProvider {
 			} else {
 				cellStops.push(stopEntry);
 			}
-		}
+		});
 	}
 	getStopsForArea(polygon){
 		if(polygon == null) {
@@ -36,5 +36,8 @@ class StopInfoProvider {
 		});
 		this.lastSentCells = new Set(cells.keys());
 		return {cells:cells, notNeededCells:notNeededCells};
+	}
+	getDetailedStopInfo(stop) {
+		return {name:stop.name};
 	}
 }

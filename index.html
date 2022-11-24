@@ -84,6 +84,9 @@
 				if('task' in e.data && e.data.task == 's2bb') {
 					stopDrawUI.updateStops(e.data);
 				}
+				if('task' in e.data && e.data.task == 'stopInfo') {
+					stopDrawUI.showStopDetailedInfo(e.data);
+				}
 			}
 			mapUI.setWorker(gtfsWorker);
 		}
@@ -92,10 +95,16 @@
 	<body onload="onLoad();"> 
 		<div id="map"></div>
 		<pre id="coordinates"></pre>
-		<div id="bottomContainer" class="hidden" onclick="this.classList=['hidden']">
+		<div id="progressBarContainer" class="bottomContainer hidden" onclick="this.classList.add('hidden')">
 			<div id="progressContent">
 				<div id="progressTitle">Sample Title</div>
 				<div id="progressBarDiv"><progress id="progressBar" max="100" value="70">70%</progress></div>
+			</div>
+		</div>
+		<div id="stopInfoContainer" class="bottomContainer hidden" onclick="this.classList.add('hidden')">
+			<div id="stopInfoContent">
+				<div></div>
+				<div><br></div>
 			</div>
 		</div>
 	</body>

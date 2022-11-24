@@ -1,6 +1,5 @@
 
 var gtfs_urls = ['https://bprp.pages.dev/budapest_gtfs.zipaa','https://bprp.pages.dev/budapest_gtfs.zipab','https://bprp.pages.dev/budapest_gtfs.zipac'];
-var timetable_url = 'https://bprp.pages.dev/timetable/';
 
 postMessage('initializing');
 
@@ -81,6 +80,14 @@ onmessage = function(e) {
 				cells = S2_CoverPolygon(e.data.bb);
 			}
 			postMessage({task:'s2bb', cells:cells, multipolygon:turf.multiPolygon(Array.from(cells.values()).map(cell=>cell.geometry.coordinates)), notNeededCells:notNeededCells});
+		}
+		if(e.data.task=='stopInfo') {
+			if(stopInfoProvider) {
+				const stop = gtfsRoutes.stops[e.data.stopId];
+				var stopInfo = stopInfoProvider.getDetailedStopInfo(stop);
+				stopInfo.task = 'stopInfo';
+				postMessage(stopInfo);
+			}
 		}
 	}
 }
