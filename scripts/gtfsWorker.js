@@ -1,5 +1,6 @@
 
 var gtfs_urls = ['https://bprp.pages.dev/budapest_gtfs.zipaa','https://bprp.pages.dev/budapest_gtfs.zipab','https://bprp.pages.dev/budapest_gtfs.zipac'];
+var timetable_url = 'https://bprp.pages.dev/timetable/';
 
 postMessage('initializing');
 
