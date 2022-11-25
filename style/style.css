@@ -4,6 +4,10 @@ body {
 	overflow: hidden;
 }
 
+*:not(pre) {
+	font-family: "Segoe UI",Roboto,"Helvetica Neue", Arial, Helvetica, Verdana, Sans-Serif
+}
+
 #map {
     position: absolute;
     top: 0;
@@ -36,6 +40,10 @@ body {
   background-size: 14px 14px;
 }
 
+.map-layers-button {
+  background: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGNsYXNzPSJmZWF0aGVyIGZlYXRoZXItbGF5ZXJzIj48cG9seWdvbiBwb2ludHM9IjEyIDIgMiA3IDEyIDEyIDIyIDcgMTIgMiI+PC9wb2x5Z29uPjxwb2x5bGluZSBwb2ludHM9IjIgMTcgMTIgMjIgMjIgMTciPjwvcG9seWxpbmU+PHBvbHlsaW5lIHBvaW50cz0iMiAxMiAxMiAxNyAyMiAxMiI+PC9wb2x5bGluZT48L3N2Zz4=");
+  background-size: 18px 18px;
+}
 
 
 .bottomContainer {
@@ -43,12 +51,27 @@ body {
   left: 0;
   width: 100%;
   bottom: 0;
-  background: rgba(51, 170, 51, .4);
+  background: transparent;
   text-align: center;
   transition: all 0.2s ease-in-out;
+  display: flex;
+  justify-content: center;
 }
 .bottomContainer.hidden {
   transform: translate(0px,100%);
+}
+
+.title {
+  font-weight: bold;
+}
+
+#stopInfoContent {
+  background: rgba(255, 255, 255, .8);
+  border-radius: 25px 25px 0px 0px;
+  margin: 0px 25px 0px 25px;
+  min-width: 200px;
+  width: 100%;
+  min-width: 500px;
 }
 
 #progressContent {
