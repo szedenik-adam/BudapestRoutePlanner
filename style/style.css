@@ -71,7 +71,7 @@ body {
   margin: 0px 25px 0px 25px;
   min-width: 200px;
   width: 100%;
-  min-width: 500px;
+  max-width: 500px;
 }
 
 #progressContent {
