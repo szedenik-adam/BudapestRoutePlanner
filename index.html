@@ -28,7 +28,9 @@
 				center: [19.06086, 47.52918],
 				zoom: 12
 			});
+			map.doubleClickZoom.disable();
 			map.touchZoomRotate.disableRotation();
+			try{map.touchZoomRotate._tapDragZoom.disable();}catch(e){console.warn("Failed to disable tap-drag-zoom!");}
 
 			mapUI = new MapUI(map);
 			mapUI.addMarkerOnClick();
