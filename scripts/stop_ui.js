@@ -184,6 +184,17 @@ class StopDrawUI {
 			</circle>` + this.clickedSvg.innerHTML;
 		this.clickedSvg.querySelectorAll("animate").forEach((element) => { element.beginElement(); });
 	  }
+	  var depHtml = '';
+	  for(const dep of stop.departures) {
+			depHtml += `<a class="stopDepartureRow">
+				<span class="tripShortName" style="color: #${dep[1][1]}; background-color: #${dep[1][0]};">${dep[0]}</span>
+				<span class="tripDepartureTime countdown" data-time="${dep[2]}">${dep[2]}</span>
+				<span class="tripHeadsign">${dep[3]}</span>
+			</a>`;
+	  }
+	  div.children[1].innerHTML = depHtml;
+	  countdown.updateElements();
+	  countdown.start();
   }
 }
 
@@ -236,4 +247,31 @@ function drawColoredCircle(settings)
 		settings.startAngleRad += Math.PI*2/settings.colors.length;
 	}
 	return arcs;
+}
+
+class Countdown {
+	constructor() {
+		this.interval = null;
+	}
+	start() {
+		if(this.interval==null) {
+			this.interval = setInterval(this.updateElements.bind(this), 1000);
+		}
+	}
+	updateElements() {
+		const now = Date.now()/1000;
+		const elems = document.getElementsByClassName('countdown');
+		for (var i = 0; i < elems.length; i++) {
+			const elem = elems[i];
+			const time = parseInt(elems[i].dataset.time);
+			const deltaSec = Math.floor(time-now);
+			if(deltaSec > 0)
+				elem.textContent = `${Math.floor(deltaSec/60)}:${(deltaSec % 60).toString().padStart(2,'0')}`;
+			else elem.textContent = 'now';
+		}
+		if(elems.length == 0) {
+			clearInterval(this.interval);
+			this.interval = null;
+		}
+	}
 }

@@ -38,6 +38,17 @@ class StopInfoProvider {
 		return {cells:cells, notNeededCells:notNeededCells};
 	}
 	getDetailedStopInfo(stop) {
-		return {name:stop.name};
+		const now = getGtfsTime(Date.now(), gtfsRoutes);
+		var departures = [];
+		for(const [trip, stopIndOfTrip] of stop.trips) {
+			const departureTime = trip.stopDep[stopIndOfTrip];
+			if(departureTime < now) continue;
+			departures.push([trip.route.name, trip.route.color, departureTime, trip.stops.at(-1).name]);
+			//if(departures.length > 10) break; // add after stop trip sorted.
+		}
+		departures.sort((a, b) => a[2] > b[2]); // TODO: sort stop's trip list by departure times! (then remove this line)
+		departures.splice(10);  // remove after stop trip sorted.
+		departures.forEach(dep => dep[2] = gtfsTimeToDate(dep[2], gtfsRoutes)/1000);
+		return {name:stop.name, departures:departures};
 	}
 }

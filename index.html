@@ -17,7 +17,7 @@
 	<script type="text/javascript" charset="utf-8" src="scripts/debug_ui.js"></script>
 	<script type="text/javascript" charset="utf-8" src="scripts/stop_ui.js"></script>
 	<script>
-		var map, mapUI, stopDrawUI, route;
+		var map, mapUI, stopDrawUI, route, countdown;
 		var gtfs, gtfsRoutes, gtfsWorker, progress;
 
 		function onLoad()
@@ -48,6 +48,7 @@
 				mapUI.tracking(false);
 			}));
 			
+			countdown = new Countdown();
 			stopDrawUI = new StopDrawUI(map);
 
 			map.addControl(new MenuControl(),'top-left');
@@ -100,6 +101,8 @@
 		<div id="stopInfoContainer" class="bottomContainer hidden" onclick="this.classList.add('hidden')">
 			<div id="stopInfoContent">
 				<div class="title"></div>
+				<div class="stopDepartures">
+				</div>
 				<div><br></div>
 			</div>
 		</div>

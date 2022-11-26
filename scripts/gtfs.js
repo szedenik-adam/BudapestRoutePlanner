@@ -902,13 +902,25 @@ function humanReadableSize(bytes) {
   return (bytes/Math.pow(1024, e)).toFixed(2)+' '+' KMGTP'.charAt(e)+'B';
 }
 
+function getGtfsTime(timeMs, data) {
+	var result = timeMs;
+	result -= (new Date(data.start_date));
+	result = result/1000 + (new Date().getTimezoneOffset())*-60;
+	result -= data.day_diff * 86400;
+	return result;
+}
+function gtfsTimeToDate(time, data) {
+	time += data.day_diff * 86400;
+	time -= (new Date().getTimezoneOffset())*-60;
+	time *= 1000;
+	time += (new Date(data.start_date)).getTime();
+	return time;
+}
+
 function route(start, end, data, options={})
 {
 	const retMode = options.ret ?? 'route';
-	var startTime = options.startTime ?? Date.now();
-	startTime -= (new Date(data.start_date));
-	startTime = startTime/1000 + (new Date().getTimezoneOffset())*-60;
-	startTime -= data.day_diff * 86400;
+	var startTime = getGtfsTime(options.startTime ?? Date.now(), data);
 				
 	var performanceStart = new Date();
 	var endTime = startTime+86400;

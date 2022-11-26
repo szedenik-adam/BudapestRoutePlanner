@@ -63,6 +63,7 @@ body {
 
 .title {
   font-weight: bold;
+  border-bottom: 1px solid #c6c6c6;
 }
 
 #stopInfoContent {
@@ -72,6 +73,42 @@ body {
   min-width: 200px;
   width: 100%;
   max-width: 500px;
+}
+
+.stopDepartures {
+  display: table;
+  border-collapse: separate;
+  border-spacing: 2px 2px;
+  margin-left: 2px;
+}
+.stopDepartureRow {
+  display: table-row;
+}
+.stopDepartureRow > span {
+  display: table-cell;
+  padding-left: 0;
+  height: 29px;
+  vertical-align: middle;
+  border-bottom: 1px dotted #e1e1e1;
+}
+.tripShortName {
+  font-size: 15px;
+  font-weight: bold;
+  border-radius: 8px;
+  min-width: 36px;
+  padding: 0 2px;
+  line-height: 20px;
+  text-align: center;
+}
+.tripDepartureTime {
+  text-align: right;
+  width: 34px;
+  padding-right: 15px;
+}
+.tripHeadsign {
+  line-height: 15px;
+  padding-right: 10px;
+  text-align: left;
 }
 
 #progressContent {
