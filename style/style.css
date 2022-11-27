@@ -56,9 +56,13 @@ body {
   transition: all 0.2s ease-in-out;
   display: flex;
   justify-content: center;
+  pointer-events: none;
 }
 .bottomContainer.hidden {
   transform: translate(0px,100%);
+}
+.bottomContainer > * {
+  pointer-events: auto;
 }
 
 .title {
@@ -69,6 +73,8 @@ body {
 #stopInfoContent {
   background: rgba(255, 255, 255, .8);
   border-radius: 25px 25px 0px 0px;
+  border: 2px solid #00000030;
+  border-bottom: none;
   margin: 0px 25px 0px 25px;
   min-width: 200px;
   width: 100%;
