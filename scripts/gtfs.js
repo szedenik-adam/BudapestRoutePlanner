@@ -371,7 +371,7 @@ async function GTFS(db, zip = null) {
 		trips.forEach(t => (delete t._index));
 
 		stops.forEach(function (stop) {
-			stop.trips.sort((a, b) => a[0].stopDep[a[1]] - b[0].stopDep[b[1]]);
+			stop.trips.sort((a, b) => trips[a[0]].stopDep[a[1]] - trips[b[0]].stopDep[b[1]]);
 		});
 
 		services = compactArray(services);
