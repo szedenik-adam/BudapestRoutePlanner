@@ -369,7 +369,11 @@ async function GTFS(db, zip = null) {
 			});
 		});
 		trips.forEach(t => (delete t._index));
-		
+
+		stops.forEach(function (stop) {
+			stop.trips.sort((a, b) => a[0].stopDep[a[1]] - b[0].stopDep[b[1]]);
+		});
+
 		services = compactArray(services);
 		trips = compactArray(trips);
 		stops = compactArray(stops);
@@ -591,6 +595,10 @@ async function GTFS(db, zip = null) {
 				}
 				return stop;
 			});
+		});
+
+		stops.forEach(function (stop) {
+			stop.trips.sort((a, b) => a[0].stopDep[a[1]] - b[0].stopDep[b[1]]);
 		});
 
 		var result = {
