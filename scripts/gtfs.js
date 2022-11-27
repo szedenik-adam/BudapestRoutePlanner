@@ -363,7 +363,9 @@ async function GTFS(db, zip = null) {
 			//trip.dates = trip.service.dates;
 			trip.stops.forEach(function (stop_index, index) {
 				var stop = stops[stop_index];
-				stop.trips.push([trip._index,index]);
+				if(index < trip.stops.length-1) { // Don't add trip to the final stop (not needed for departures).
+					stop.trips.push([trip._index,index]);
+				}
 			});
 		});
 		trips.forEach(t => (delete t._index));
@@ -584,7 +586,9 @@ async function GTFS(db, zip = null) {
 			trip.dates = trip.service.dates;
 			trip.stops = trip.stops.map(function (stop_index, index) {
 				var stop = stops[stop_index];
-				stop.trips.push([trip,index]);
+				if(index < trip.stops.length-1) { // Don't add trip to the final stop (not needed for departures).
+					stop.trips.push([trip,index]);
+				}
 				return stop;
 			});
 		});
