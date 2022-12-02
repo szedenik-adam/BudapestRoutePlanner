@@ -168,8 +168,6 @@ async function GTFS(db, zip = null) {
 		return [min, max];
 	}
 	
-	me.extractAll = function() {
-	}
 	me.extractCommon = function() { // save stops and shapes and routes.
 		console.log('serializeCommon');
 		// init routes
@@ -226,7 +224,7 @@ async function GTFS(db, zip = null) {
 		routes = Array.from(routes.values());
 		routes.forEach((r,i) => r._index = i);
 		
-		return {range:me.dayRange(), stops:stops, routes:routes, shapes:shapes};
+		return {range:me.dayRange(), stops:stops, routes:routes, shapes:shapes, stopMap:me.stop_id, routeMap:me.route_id};
 	}
 	me.serializeDay = function(startDay, common) {
 		console.log('serializeDay', startDay, common);
@@ -295,6 +293,10 @@ async function GTFS(db, zip = null) {
 			t.stopShapeDist = t.stops.map(s => s[3]);
 			t.stops   = t.stops.map(s => s[2]);
 		})
+		for (const [tripOriginalId, tripInd] of Object.entries(me.trip_id)) {
+			trips.originalInd = tripOriginalId;
+		};
+
 
 		// now clean up
 		if('calendar' in data) {data.calendar.forEach(c => { throw Error() });}
@@ -344,6 +346,7 @@ async function GTFS(db, zip = null) {
 			s._index = i;
 		});
 		
+		var tripMap = {};
 		trips = Array.from(trips.values());
 		trips = trips.filter(t => t._use);
 		trips.forEach((t,i) => {
@@ -352,6 +355,8 @@ async function GTFS(db, zip = null) {
 			t.stops = t.stops.map(s => s._id);
 			delete t._use;
 			t._index = i;
+			tripMap[t.originalInd] = i;
+			delete t.originalInd;
 		});
 
 		stops.forEach(s => (delete s._index, delete s._use, delete s._id));
@@ -383,9 +388,9 @@ async function GTFS(db, zip = null) {
 			c_range:common.range,
 			services: services,
 			trips: trips,
-			stops: stops
+			stops: stops,
+			tripMap: tripMap,
 		}
-		console.log('serializeDay-res', result);
 		return result;
 	}
 	
@@ -496,6 +501,9 @@ async function GTFS(db, zip = null) {
 			t.stopShapeDist = t.stops.map(s => s[3]);
 			t.stops   = t.stops.map(s => s[2]);
 		})
+		for (const [tripOriginalId, tripInd] of Object.entries(me.trip_id)) {
+			trips.originalInd = tripOriginalId;
+		};
 
 		// now clean up
 		if('calendar' in data) {data.calendar.forEach(c => { throw Error() });}
@@ -555,6 +563,7 @@ async function GTFS(db, zip = null) {
 			s._index = i;
 		});
 		
+		var tripMap = {};
 		trips = Array.from(trips.values());
 		trips = trips.filter(t => t._use);
 		trips.forEach((t,i) => {
@@ -562,6 +571,8 @@ async function GTFS(db, zip = null) {
 			t.service = t.service._index;
 			t.stops = t.stops.map(s => s._index);
 			delete t._use;
+			tripMap[t.originalInd] = i;
+			delete t.originalInd;
 		});
 
 		stops.forEach(s => (delete s._index, delete s._use));
@@ -608,6 +619,10 @@ async function GTFS(db, zip = null) {
 			services: services,
 			trips: trips,
 			shapes: shapes,
+			
+			stopMap:me.stop_id,
+			routeMap:me.route_id,
+			tripMap:tripMap, // me.trip_id contains all trips.
 		}
 
 		return result;
@@ -1168,7 +1183,10 @@ function initRoutes(common, day, dayNum)
 		shapes: common.shapes,
 		stops: stops,
 		trips: trips,
-		lands: []
+		lands: [],
+		stopMap: common.stopMap,
+		routeMap: common.routeMap,
+		tripMap: day.tripMap,
 	};
 	if('lands' in common) result.lands = common.lands; else delete result.lands;
 	return result;
