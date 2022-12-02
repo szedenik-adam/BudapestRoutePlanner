@@ -36,8 +36,7 @@ async function initGTFS()
 	} catch(e) {
 		console.warn("Unable to open DB", e);
 	}
-	
-	var gtfs_zip = null; 
+
 	var timetableInfo = await LoadTimeTable();
 	gtfsRoutes = timetableInfo.routes;
 	
@@ -65,6 +64,25 @@ onmessage = function(e) {
 			e.data.row[i] = result;
 		});
 		postMessage({rowInd:e.data.rowInd, row:e.data.row});
+	}
+	else if('taskNum' in e.data) {
+		if('task' in e.data) {
+			if(e.data.task=='gtfs-rt') {
+				if('vehicles' in e.data && gtfsRoutes) {
+					e.data.vehicles.entity.forEach(e => {
+						const originalRouteId = e.vehicle.trip.route_id;
+						if(!originalRouteId) {return;}
+						const routeId = gtfsRoutes.routeMap[originalRouteId];
+						if(!routeId) {return;}
+						const route = gtfsRoutes.routes[routeId];
+						if(!route) {return;}
+						e.vehicle.vehicle.label = route.name+' > '+e.vehicle.vehicle.label;
+					});
+					//console.log('WORKER gtfs-rt',e.data);
+				}
+			}
+		}
+		postMessage(e.data);
 	}
 	else if('task' in e.data) {
 		if(e.data.task=='s2') {

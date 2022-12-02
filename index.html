@@ -17,12 +17,17 @@
 	<script type="text/javascript" charset="utf-8" src="scripts/external/decomp.js"></script>
 	<script type="text/javascript" charset="utf-8" src="scripts/debug_ui.js"></script>
 	<script type="text/javascript" charset="utf-8" src="scripts/stop_ui.js"></script>
+	<script type="text/javascript" charset="utf-8" src="scripts/external/protobuf.minimal.min.js"></script>
+	<script type="text/javascript" charset="utf-8" src="scripts/external/protobuf-gtfs-realcity.js"></script>
+	<script type="text/javascript" charset="utf-8" src="scripts/realtime.js"></script>
 	<script>
-		var map, mapUI, stopDrawUI, route, countdown;
+		var map, mapUI, stopDrawUI, route, countdown, realtime, realtimeUI, workerPromises;
 		var gtfs, gtfsRoutes, gtfsWorker, progress;
 
 		function onLoad()
 		{
+			realtime = new Realtime();
+			
 			map = new maplibregl.Map({
 				container: 'map',
 				style: style,
@@ -51,6 +56,7 @@
 			
 			countdown = new Countdown();
 			stopDrawUI = new StopDrawUI(map);
+			realtimeUI = new RealtimeUI(mapUI);
 
 			map.addControl(new MenuControl(),'top-left');
 			map.addControl(new IsochroneControl(),'top-left');
@@ -59,6 +65,7 @@
 			progress = new ProgressBar();
 			
 			gtfsWorker = new Worker('scripts/gtfsWorker.js');
+			workerPromises = new WorkerPromises(gtfsWorker);
 			gtfsWorker.onmessage = function(e) {
 				if(typeof e.data !== 'object' || e.data === null) return;
 				if('route' in e.data) {
@@ -91,6 +98,7 @@
 				if('task' in e.data && e.data.task == 'stopInfo') {
 					stopDrawUI.showStopDetailedInfo(e.data);
 				}
+				workerPromises.checkMessageFromWorker(e.data);
 			}
 			mapUI.setWorker(gtfsWorker);
 		}
