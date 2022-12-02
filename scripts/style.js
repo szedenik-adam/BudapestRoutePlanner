@@ -20,7 +20,7 @@ var style = {
       "maxzoom": 14
     }
   },
-  "sprite": "https://szedenik-adam.github.io/BudapestRoutePlanner/osm-sprite/sprite",
+  "sprite": "https://szedenik-adam.github.io/BudapestRoutePlanner/osm-sprite/sprite-vehicle",
   "glyphs": "https://geoserveis.icgc.cat/contextmaps/glyphs/{fontstack}/{range}.pbf", 
     "layers": [
     {
