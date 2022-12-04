@@ -101,26 +101,41 @@ class RealtimeUI {
 			}
 		});
 		this.mapUI.map.addLayer({
+			'id': 'vehicleDirs',
+			'type': 'symbol',
+			'source': 'vehicles',
+			'layout': {
+				'icon-image': 'varrow',
+				'icon-size': ['interpolate',['linear'],['zoom'], 10,0.05, 15,0.43],
+				'icon-rotate': ['get', 'bearing'],
+				'icon-rotation-alignment': 'map',
+				"icon-ignore-placement": true,
+				"icon-allow-overlap": true,
+			},
+			'filter': ['has', 'bearing'],
+			'minzoom': 12
+		});
+		this.mapUI.map.addLayer({
 			'id': 'vehicles',
 			'type': 'symbol',
 			'source': 'vehicles',
 			'layout': {
 				'icon-image': ['string', ['get', 'icon'], 'bus'],
 				'icon-size': ['interpolate',['linear'],['zoom'], 10,0.05, 15,0.3],
-				'icon-rotate': ['number', ['get', 'bearing'], 45],
 				'icon-rotation-alignment': 'map',
 				"icon-ignore-placement": true,
 				"icon-allow-overlap": true,
 				
 				'text-field': ['string', ['get', 'label'], 'null'],
 				'text-font': ['Open Sans Regular'],
-				'text-offset': [0.7, 0],
+				'text-offset': [1.2, 0],
 				"text-size": {
 					"stops": [ [0, 0], [14, 0], [14.4, 14] ]
 				},
 				'text-anchor': 'left',
 				'text-allow-overlap': true,
 				'text-ignore-placement':true,
+				'text-optional':true,
 			},
 			'paint': {
 			  "text-color": "#000000",
@@ -135,7 +150,7 @@ class RealtimeUI {
 			vpoints.push(turf.point([e.vehicle.position.longitude, e.vehicle.position.latitude], 
 				{
 					label: e.vehicle.vehicle.label,
-					bearing: 180+(e.vehicle.position.bearing ?? -180),
+					bearing: e.vehicle.position.bearing,
 					icon: this.vehicleTypeMap.get(e.vehicle.vehicle[".realcity.vehicle"].vehicle_type)??'bus_station'
 				}
 			));

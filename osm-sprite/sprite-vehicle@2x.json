@@ -21,5 +21,6 @@
 "w_metro": {"width": 100, "height": 100, "x": 300, "y": 1848, "pixelRatio": 1},
 "w_suburban_rail": {"width": 100, "height": 100, "x": 400, "y": 1848, "pixelRatio": 1},
 "w_rail": {"width": 100, "height": 100, "x": 500, "y": 1848, "pixelRatio": 1},
-"w_boat": {"width": 100, "height": 100, "x": 600, "y": 1848, "pixelRatio": 1}
+"w_boat": {"width": 100, "height": 100, "x": 600, "y": 1848, "pixelRatio": 1},
+"varrow": {"width": 100, "height": 100, "x": 900, "y": 1648, "pixelRatio": 1}
 }
