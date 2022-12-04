@@ -6,6 +6,8 @@ class Realtime {
 		this.tripMap = {};
 		this.lastVehicleUpdate = 0;
 		this.apikey = '';
+		this.vehiclePollingPaused = false;
+
 		fetch('https://bprp.pages.dev/realtime.txt')
 		.then((response) => {
 			if (!response.ok) { throw new Error('Failed to get realtime api key!'); }
@@ -17,6 +19,18 @@ class Realtime {
 		})
 		.catch((error) => {
 			console.error('Realtime api key fetch operation failed:', error);
+		});
+		
+		document.addEventListener("visibilitychange", () => {
+		  if (document.hidden) {
+			  if (this.vehicleInterval) {
+				this.stopVehiclePolling(true);
+			  }
+		  } else {
+			  if (this.vehiclePollingPaused) {
+				this.startVehiclePolling();
+			  }
+		  }
 		});
 	}
 	
@@ -40,6 +54,7 @@ class Realtime {
 		}
 	}
 	startVehiclePolling() {
+		this.vehiclePollingPaused = false;
 		if(!this.vehicleInterval) {
 			if(Date.now() - this.lastVehicleUpdate > 10000) {
 				this.pollVehicle();
@@ -47,7 +62,8 @@ class Realtime {
 			this.vehicleInterval = setInterval(this.pollVehicle.bind(this), 10000);
 		}
 	}
-	stopVehiclePolling() {
+	stopVehiclePolling(isPaused) {
+		this.vehiclePollingPaused = isPaused;
 		if(this.vehicleInterval) {
 			clearInterval(this.vehicleInterval);
 			this.vehicleInterval = null;
