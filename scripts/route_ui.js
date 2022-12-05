@@ -39,25 +39,15 @@ class MapUI {
 	this.nextRouteTask = null;
   }
   
-  _addMarkerOnClickEventHandler(e)
+  addMarker(options)
   {
-	const destMarker = (this.rSourceMarker != null || this.geotracking);
-	const cElem = document.getElementById("coordinates");
-	cElem.innerHTML = e.lngLat.lat + ', ' + e.lngLat.lng;
-	
-	if(destMarker && this.rDestinationMarker != null) {
-		this.rDestinationMarker.setLngLat(e.lngLat);
-		this.addRouteTask();
-		return;
-	}
-	
 	var markerElement = document.createElement('div');
 	markerElement.setAttribute('style', 'width:20px; height:20px');
 	var svgElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 	svgElement.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
 	svgElement.setAttribute('viewBox', '0 0 10 10');
 	svgElement.setAttribute('style', 'overflow: visible;"');
-	if(destMarker)
+	if(options.destMarker)
 		 svgElement.innerHTML = '<circle cx="5" cy="5" r="5" fill="white"/><circle cx="5" cy="5" r="4.9" fill="black"/><circle cx="5" cy="5" r="3.7" fill="white"/><circle cx="5" cy="5" r="2" fill="black"/>';
 	else svgElement.innerHTML = '<circle cx="5" cy="5" r="5" fill="white"/><circle cx="5" cy="5" r="4.9" fill="black"/><circle cx="5" cy="5" r="3.7" fill="white"/>';
 	svgElement.innerHTML += '<g class="timeG" visibility="hidden">\
@@ -65,10 +55,11 @@ class MapUI {
 	<text x="50%" y="14" dominant-baseline="middle" text-anchor="middle" font-weight="bold" font-size="0.5em" font-family="Calibri, sans-serif" class="timeText">00:00</text>\
 	</g>';
 	markerElement.appendChild(svgElement);
+	markerElement.style.visibility = ('visible' in options && !options.visible) ? 'hidden' : 'visible';
 	const marker = new maplibregl.Marker({
 		element: markerElement,
 		draggable: true
-	}).setLngLat(e.lngLat).addTo(map);
+	}).setLngLat(options.lngLat).addTo(map);
 	marker.getElement().addEventListener('click', (e) => {
 		console.log('marker clicked', e);
 		e.stopPropagation();
@@ -86,7 +77,24 @@ class MapUI {
 		const timeT = markerElement.getElementsByClassName('timeText');
 		timeT[0].innerHTML = time;
 	}
-	if(destMarker) this.rDestinationMarker = marker; else this.rSourceMarker = marker;
+	if(options.destMarker) this.rDestinationMarker = marker; else this.rSourceMarker = marker;
+	console.log('added marker', marker);
+	return marker;
+  }
+  
+  _addMarkerOnClickEventHandler(e)
+  {
+	const destMarker = (this.rSourceMarker != null || (Date.now()-this.userLocationTime)<5200);
+	const cElem = document.getElementById("coordinates");
+	cElem.innerHTML = e.lngLat.lat + ', ' + e.lngLat.lng;
+	
+	if(destMarker && this.rDestinationMarker != null) {
+		this.rDestinationMarker.setLngLat(e.lngLat);
+		this.addRouteTask();
+		return;
+	}
+	
+	this.addMarker({destMarker:destMarker, lngLat:e.lngLat});
 	this.addRouteTask();
   }
 
@@ -102,10 +110,16 @@ class MapUI {
 	else { func.call(ctx); }
   }
   
-  tracking(isEnabled)
+  updateUserLocation(lngLat)
   {
-	  this.geotracking = isEnabled;
-	  console.log('geotracking', this.geotracking);
+	  this.userLocation = lngLat;
+	  this.userLocationTime = Date.now();
+
+	  if(this.rSourceMarker == null) {
+		  this.addMarker({destMarker:false, lngLat:lngLat, visible:true});
+	  } else {
+		  this.rSourceMarker.setLngLat(lngLat);
+	  }
   }
   
   setWorker(worker)

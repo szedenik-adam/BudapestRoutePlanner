@@ -48,10 +48,9 @@
 				trackUserLocation: true
 			}).on('geolocate', (e) => {
 				console.log('geolocate', e);
+				mapUI.updateUserLocation({lng:e.coords.longitude, lat:e.coords.latitude});
 			}).on('trackuserlocationstart', function() {
-				mapUI.tracking(true);
 			}).on('trackuserlocationend', function() {
-				mapUI.tracking(false);
 			}));
 			
 			countdown = new Countdown();
