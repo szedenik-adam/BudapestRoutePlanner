@@ -971,7 +971,8 @@ function route(start, end, data, options={})
 
 			var time = startTime + duration + transferWait;
 			stop.arr = {time:time, history:[{
-				text:'walk to '+stop.name,
+				task:'walk',
+				dstStop:stop.name,
 				duration: duration,
 				points: [[start.lon,start.lat], [stop.lon,stop.lat]], 
 				color:'gray',
@@ -1006,14 +1007,15 @@ function route(start, end, data, options={})
 							stop.arr.time = arrTime;
 							stop.arr.history = checkStop.arr.history.slice(0)
 							stop.arr.history.push({
-								text: 'wait',
+								task: 'wait',
 								duration: (trip.stopDep[index]+offset) - checkStop.arr.time + transferWait,
 							})
 							var points = getShapePoints(data.shapes[trip.shape_id], trip.stopShapeDist[index], trip.stopShapeDist[i]);
 							var stops = [];
 							for (var j = index; j <= i; j++) stops.push([trip.stops[j].lon,trip.stops[j].lat]);
 							stop.arr.history.push({
-								text: trip.route.name+' to '+stop.name,
+								dstStop:stop.name,
+								routeName: trip.route.name,
 								duration: trip.stopArr[i] - trip.stopDep[index],
 								points:points,
 								stops:stops,
@@ -1033,7 +1035,8 @@ function route(start, end, data, options={})
 					nStop.arr.time = arrTimeByWalk;
 					nStop.arr.history = checkStop.arr.history.slice(0);
 					nStop.arr.history.push({
-						text:'walk to '+nStop.name,
+						task:'walk',
+						dstStop:nStop.name,
 						duration: walkTime,
 						points: [[checkStop.lon,checkStop.lat], [nStop.lon,nStop.lat]], 
 						color:'gray',
@@ -1058,7 +1061,7 @@ function route(start, end, data, options={})
 			bestTime = stopTotalTime;
 			bestStop = stop;
 			bestLastStep = {
-				text:'walk to destination',
+				task:'walk',
 				duration:stop.endDuration,
 				points:[[stop.lon,stop.lat], [end.lon,end.lat]],
 				color:'gray',
@@ -1083,10 +1086,11 @@ function route(start, end, data, options={})
 		duration = Math.ceil(duration/60).toFixed(0)+' Min';
 		var startTime = step.start ? fmtTime(step.start) : '';
 		var   endTime = step.end   ? fmtTime(step.end) : '';
+		const stepText = (step.routeName ?? '')+(step.task ?? '')+(step.dstStop ? (' to '+step.dstStop) :'');
 		html.push([
-			'<tr><td>'+startTime+'</td><td>'+endTime+'</td><td class="text">'+step.text+'</td><td>'+duration+'</td></tr>'
+			'<tr><td>'+startTime+'</td><td>'+endTime+'</td><td class="text">'+stepText+'</td><td>'+duration+'</td></tr>'
 		].join(''));
-		console.log(startTime+' '+endTime+' '+step.text, duration);
+		console.log(startTime+' '+endTime+' '+stepText, duration);
 		if (step.points) path.push({p:step.points, c:step.color||'black', s:step.stops||[], t:[startTime,endTime]});
 	})
 	bestStop.arr.history.pop();
@@ -1104,7 +1108,7 @@ function route(start, end, data, options={})
 		var h = (t % 24).toFixed(0);
 		return h+':'+('00'+m).slice(-2)
 	}
-	return {'path':path, 'html':html, 'perf_sec':performanceDuration/1000};
+	return {'path':path, 'steps':bestStop.arr.history, lastStep:bestLastStep, 'perf_sec':performanceDuration/1000};
 }
 
 function compactArray(arr) {

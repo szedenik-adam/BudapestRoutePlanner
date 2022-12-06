@@ -134,3 +134,92 @@ body {
 #progressBar {
 	width: 100%;
 }
+
+.walkSymbol {
+	background: url("data:image/png;base64,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");
+	background-size: 18px 18px;
+	width:18px;
+	height:18px;
+	display: inline-block;
+}
+.nextSymbol {
+	background: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA8AAAAPCAYAAAA71pVKAAAAkklEQVQoU2NkoAAwUqCXAavmVatWsYWFhf0iZDCG5rS0NBFGRsb9zMzMvdOmTVuAzwBsmrmAmjcDNTn8//8/adasWQtxGYDV2UDb4QYADUqYMWPGYmwG4AwwZAOAGuNnzpy5BN0AvKEN9f99oPPZgBpVgV54hGwA9W0m28/IGkkObYriGRQgZKcwQkmSqNAmxhAA0Hk+ECo8nVsAAAAASUVORK5CYII=");
+	display: inline-block;background-repeat: no-repeat;
+	background-size: 15px 15px;
+	width:15px;
+	height:15px;
+	display: inline-block;
+}
+#routeInfoContent {
+  background: rgba(255, 255, 255, .8);
+  border-radius: 25px 25px 0px 0px;
+  border: 2px solid #00000030;
+  border-bottom: none;
+  margin: 0px 25px 0px 25px;
+  padding: 0px 20px 0px 20px;
+  min-width: 100px;
+  width: 100%;
+  max-width: 500px;
+  text-align: left;
+}
+.routes .entry h1,
+.routes .entry .rightHeadline {
+	font-size: 1rem;
+	font-weight: 650;
+	line-height: 1.5rem;
+	margin: 0;
+}
+.routes .entry .rightHeadline {
+	float: right;
+}
+.hsList > span {
+	display: inline-block;
+	margin: 2px 1px 0;
+	height: 16px;
+	font-size: 12px;
+	line-height: 16px;
+  
+	background-color: #009ee3;
+	color: #ffffff;
+	content: "";
+	position: relative;
+	vertical-align: 3px;
+	margin-left: 3px;
+	margin-right: 3px;
+	padding: 0 3px;
+	display: inline-block;
+	cursor: default;
+	font-weight: 400;
+}
+.hsList > span > span {
+	position: relative;
+	z-index: 2;
+}
+.hsList > span:not(:first-child)::before,
+.hsList > span:not(:last-child)::after {
+	transform: skew(-20deg);
+	content: "";
+	position: absolute;
+	width: 6px;
+	height: 16px;
+	z-index: 1;
+	background: inherit;
+}
+.hsList > span::before {
+	left: -3px;
+}
+.hsList > span:first-child {
+	padding-left: 6px;
+	margin-left: 2px;
+	border-top-left-radius: 4px;
+	border-bottom-left-radius: 4px;
+}
+.hsList > span:last-child {
+	padding-right: 6px;
+	margin-right: 2px;
+	border-top-right-radius: 4px;
+	border-bottom-right-radius: 4px;
+}
+.routes .details {
+	color: #707570;
+}

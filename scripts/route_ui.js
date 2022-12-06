@@ -345,3 +345,49 @@ class ProgressBar {
 	setTitle(title){document.getElementById("progressTitle").textContent=title; return this;}
 	setProgress(progress){document.getElementById("progressBar").value=progress*100; return this;}
 }
+
+function fmtTime(t) { // also defined in gtfs.js (todo: move to common file!)
+	t = t % 86400;
+	var s = (t % 60).toFixed(0);
+	t = Math.floor(t/60);
+	var m = (t % 60).toFixed(0);
+	t = Math.floor(t/60);
+	var h = (t % 24).toFixed(0);
+	return h+':'+('00'+m).slice(-2)
+}
+function showRoute(steps)
+{
+	const panel = document.getElementById('routeInfoContainer');
+
+	const leftHeadline = panel.getElementsByTagName("h1")[0];
+	const rightHeadline = panel.getElementsByClassName('rightHeadline')[0];
+	var start = steps[0].start;
+	if(steps.length > 1 && steps[1].task=='wait') { start += steps[1].duration; }
+	const end = steps.at(-1).end;
+	leftHeadline.textContent = `${fmtTime(start)} - ${fmtTime(end)}`;
+	rightHeadline.textContent = `${Math.ceil((end-start)/60)} minutes`
+
+	const routeHolder = panel.getElementsByClassName('route')[0];
+	var routeContent = '';
+	var firstElement = true, lastTask = '';
+	for(const step of steps) {
+		if('task' in step && step.task == 'wait') { continue; }
+		if('task' in step && step.task == 'walk' && lastTask == 'walk') { continue; }
+
+		if(!firstElement) {
+			routeContent += '<span><span class="nextSymbol"></span></span>';
+		} else { firstElement = false; }
+
+		if('routeName' in step) {
+			lastTask = step.routeName;
+			routeContent += `<span class="hsList"> <span><span>${step.routeName}</span></span> </span>`;
+		}
+		else if('task' in step) {
+			lastTask = step.task;
+			if(step.task == 'walk') {
+				routeContent += '<span><span class="walkSymbol"></span></span>';
+			}
+		}
+	}
+	routeHolder.innerHTML = routeContent;
+}
