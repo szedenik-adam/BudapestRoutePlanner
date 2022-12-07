@@ -972,7 +972,7 @@ function route(start, end, data, options={})
 			var time = startTime + duration + transferWait;
 			stop.arr = {time:time, history:[{
 				task:'walk',
-				dstStop:stop.name,
+				dstStop:stop,
 				duration: duration,
 				points: [[start.lon,start.lat], [stop.lon,stop.lat]], 
 				color:'gray',
@@ -1014,7 +1014,7 @@ function route(start, end, data, options={})
 							var stops = [];
 							for (var j = index; j <= i; j++) stops.push([trip.stops[j].lon,trip.stops[j].lat]);
 							stop.arr.history.push({
-								dstStop:stop.name,
+								dstStop:stop,
 								route: trip.route,
 								duration: trip.stopArr[i] - trip.stopDep[index],
 								points:points,
@@ -1036,7 +1036,7 @@ function route(start, end, data, options={})
 					nStop.arr.history = checkStop.arr.history.slice(0);
 					nStop.arr.history.push({
 						task:'walk',
-						dstStop:nStop.name,
+						dstStop:nStop,
 						duration: walkTime,
 						points: [[checkStop.lon,checkStop.lat], [nStop.lon,nStop.lat]], 
 						color:'gray',
@@ -1081,11 +1081,36 @@ function route(start, end, data, options={})
 	];
 	var path = [];
 	bestStop.arr.history.push(bestLastStep);
-	bestStop.arr.history.forEach(function (step) {
+	
+	bestStop.arr.history.forEach(function (step, si) {
 		if('route' in step) {
+			const srcStep = si>1 && 'dstStop' in bestStop.arr.history[si-1] ? bestStop.arr.history[si-1] : (si>1 && 'dstStop' in bestStop.arr.history[si-2] ? bestStop.arr.history[si-2] : null);
+			if(srcStep && 'dstStop' in step) {
+				const srcStop = srcStep.dstStop;
+				const srcStartTime = srcStep.start;
+				routeIds = collectSimilarRoutes(srcStop, step.dstStop, srcStartTime, [step.route._id]);
+				routeIds.shift();
+				step.altRoutes = routeIds.map(rid => [data.routes[rid].name, data.routes[rid].color]);
+				step.altRoutes.sort((a,b)=> {
+				  if (parseInt(a[0]) < parseInt(b[0])) return -1;
+				  if (parseInt(a[0]) > parseInt(b[0])) return 1;
+				  if (a[0] < b[0]) return -1;
+				  if (a[0] > b[0]) return 1;
+				  return 0;
+				});
+			}
 			step.routeName = step.route.name;
 			step.color = step.route.color;
 			delete step.route;
+		}
+	});
+
+	var bestRouteHistory = bestStop.arr.history.map(step => {return {...step}});
+	bestStop.arr.history.pop();
+
+	bestRouteHistory.forEach(function (step) {
+		if('dstStop' in step && typeof step.dstStop === 'object') {
+			step.dstStop = step.dstStop.name;
 		}
 		
 		var duration = step.duration;
@@ -1099,7 +1124,6 @@ function route(start, end, data, options={})
 		console.log(startTime+' '+endTime+' '+stepText, duration);
 		if (step.points) path.push({p:step.points, c:Array.isArray(step.color) ? '#'+step.color[0] : step.color||'black', s:step.stops||[], t:[startTime,endTime]});
 	})
-	bestStop.arr.history.pop();
 	html.push('</table>');
 	html = html.join('');
 
@@ -1114,7 +1138,18 @@ function route(start, end, data, options={})
 		var h = (t % 24).toFixed(0);
 		return h+':'+('00'+m).slice(-2)
 	}
-	return {'path':path, 'steps':bestStop.arr.history, lastStep:bestLastStep, 'perf_sec':performanceDuration/1000};
+	return {'path':path, 'steps':bestRouteHistory, lastStep:bestLastStep, 'perf_sec':performanceDuration/1000};
+}
+
+function collectSimilarRoutes(srcStop, dstStop, srcStartTime, routeIds)
+{
+	const lastDepTime = srcStartTime+30*60;
+	for(const trip of srcStop.trips) {
+		const tripDepTime = trip[0].stopDep[trip[1]];
+		if(tripDepTime > srcStartTime && tripDepTime < lastDepTime && trip[0].stops.includes(dstStop, trip[1]) && !routeIds.includes(trip[0].route._id)) { routeIds.push(trip[0].route._id);}
+		if(routeIds.length > 10) break;
+	}
+	return routeIds;
 }
 
 function compactArray(arr) {

@@ -380,8 +380,17 @@ function showRoute(steps)
 
 		if('routeName' in step) {
 			lastTask = step.routeName;
+			var altRoutes = '';
+			if('altRoutes' in step) {
+				altRoutes = [];
+				for(const altRoute of step.altRoutes) {
+					const style = 'style="background-color:#'+altRoute[1][0]+';color:#'+altRoute[1][1]+'"';
+					altRoutes.push(`<span ${style}><span>${altRoute[0]}</span></span>`);
+				}
+				altRoutes = altRoutes.join(' ');
+			}
 			const style = 'color' in step ? 'style="background-color:#'+step.color[0]+';color:#'+step.color[1]+'"' : '';
-			routeContent += `<span class="hsList"> <span ${style}><span>${step.routeName}</span></span> </span>`;
+			routeContent += `<span class="hsList"> <span ${style}><span>${step.routeName}</span></span> ${altRoutes}</span>`;
 		}
 		else if('task' in step) {
 			lastTask = step.task;
