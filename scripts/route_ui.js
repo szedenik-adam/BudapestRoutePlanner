@@ -365,7 +365,7 @@ function showRoute(steps)
 	if(steps.length > 1 && steps[1].task=='wait') { start += steps[1].duration; }
 	const end = steps.at(-1).end;
 	leftHeadline.textContent = `${fmtTime(start)} - ${fmtTime(end)}`;
-	rightHeadline.textContent = `${Math.ceil((end-start)/60)} minutes`
+	rightHeadline.textContent = `${Math.ceil((end-start)/60)} minutes`;
 
 	const routeHolder = panel.getElementsByClassName('route')[0];
 	var routeContent = '';
@@ -380,7 +380,8 @@ function showRoute(steps)
 
 		if('routeName' in step) {
 			lastTask = step.routeName;
-			routeContent += `<span class="hsList"> <span><span>${step.routeName}</span></span> </span>`;
+			const style = 'color' in step ? 'style="background-color:#'+step.color[0]+';color:#'+step.color[1]+'"' : '';
+			routeContent += `<span class="hsList"> <span ${style}><span>${step.routeName}</span></span> </span>`;
 		}
 		else if('task' in step) {
 			lastTask = step.task;

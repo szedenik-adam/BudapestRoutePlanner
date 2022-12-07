@@ -1015,7 +1015,7 @@ function route(start, end, data, options={})
 							for (var j = index; j <= i; j++) stops.push([trip.stops[j].lon,trip.stops[j].lat]);
 							stop.arr.history.push({
 								dstStop:stop.name,
-								routeName: trip.route.name,
+								route: trip.route,
 								duration: trip.stopArr[i] - trip.stopDep[index],
 								points:points,
 								stops:stops,
@@ -1082,6 +1082,12 @@ function route(start, end, data, options={})
 	var path = [];
 	bestStop.arr.history.push(bestLastStep);
 	bestStop.arr.history.forEach(function (step) {
+		if('route' in step) {
+			step.routeName = step.route.name;
+			step.color = step.route.color;
+			delete step.route;
+		}
+		
 		var duration = step.duration;
 		duration = Math.ceil(duration/60).toFixed(0)+' Min';
 		var startTime = step.start ? fmtTime(step.start) : '';
@@ -1091,7 +1097,7 @@ function route(start, end, data, options={})
 			'<tr><td>'+startTime+'</td><td>'+endTime+'</td><td class="text">'+stepText+'</td><td>'+duration+'</td></tr>'
 		].join(''));
 		console.log(startTime+' '+endTime+' '+stepText, duration);
-		if (step.points) path.push({p:step.points, c:step.color||'black', s:step.stops||[], t:[startTime,endTime]});
+		if (step.points) path.push({p:step.points, c:Array.isArray(step.color) ? '#'+step.color[0] : step.color||'black', s:step.stops||[], t:[startTime,endTime]});
 	})
 	bestStop.arr.history.pop();
 	html.push('</table>');
