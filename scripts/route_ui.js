@@ -365,7 +365,7 @@ function showRoute(steps)
 	if(steps.length > 1 && steps[1].task=='wait') { start += steps[1].duration; }
 	const end = steps.at(-1).end;
 	leftHeadline.textContent = `${fmtTime(start)} - ${fmtTime(end)}`;
-	rightHeadline.textContent = `${Math.ceil((end-start)/60)} minutes`;
+	rightHeadline.textContent = `${Math.ceil((end-steps[0].start)/60)} minutes`;
 
 	const routeHolder = panel.getElementsByClassName('route')[0];
 	var routeContent = '';
