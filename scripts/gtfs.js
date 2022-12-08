@@ -294,7 +294,7 @@ async function GTFS(db, zip = null) {
 			t.stops   = t.stops.map(s => s[2]);
 		})
 		for (const [tripOriginalId, tripInd] of Object.entries(me.trip_id)) {
-			trips.originalInd = tripOriginalId;
+			trips.get(tripInd).originalInd = tripOriginalId;
 		};
 
 
@@ -502,7 +502,7 @@ async function GTFS(db, zip = null) {
 			t.stops   = t.stops.map(s => s[2]);
 		})
 		for (const [tripOriginalId, tripInd] of Object.entries(me.trip_id)) {
-			trips.originalInd = tripOriginalId;
+			trips.get(tripInd).originalInd = tripOriginalId;
 		};
 
 		// now clean up
