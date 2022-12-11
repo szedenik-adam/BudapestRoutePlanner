@@ -186,7 +186,7 @@ class StopDrawUI {
 	  }
 	  var depHtml = '';
 	  for(const dep of stop.departures) {
-			depHtml += `<a class="stopDepartureRow">
+			depHtml += `<a class="stopDepartureRow" style="color:${dep[4]?'green':'black'};">
 				<span class="tripShortName" style="color: #${dep[1][1]}; background-color: #${dep[1][0]};">${dep[0]}</span>
 				<span class="tripDepartureTime countdown" data-time="${dep[2]}">${dep[2]}</span>
 				<span class="tripHeadsign">${dep[3]}</span>

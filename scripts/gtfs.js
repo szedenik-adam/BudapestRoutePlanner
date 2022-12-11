@@ -1002,7 +1002,7 @@ function route(start, end, data, options={})
 					if (depTime < minTime) return;
 					for (var i = index+1; i < trip.stopDep.length; i++) {
 						var stop = trip.stops[i];
-						var arrTime =  offset+trip.stopArr[i]+transferWait;
+						var arrTime =  offset+trip.stopDep[i]+transferWait;
 						if (arrTime < stop.arr.time) {
 							stop.arr.time = arrTime;
 							stop.arr.history = checkStop.arr.history.slice(0)
@@ -1016,12 +1016,12 @@ function route(start, end, data, options={})
 							stop.arr.history.push({
 								dstStop:stop,
 								route: trip.route,
-								duration: trip.stopArr[i] - trip.stopDep[index],
+								duration: trip.stopDep[i] - trip.stopDep[index],
 								points:points,
 								stops:stops,
 								color:'#'+trip.route.color[0],
 								start:trip.stopDep[index]+offset,
-								end:  trip.stopArr[i]+offset,
+								end:  trip.stopDep[i]+offset,
 							})
 						}
 					}

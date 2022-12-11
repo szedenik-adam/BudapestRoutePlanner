@@ -39,13 +39,28 @@ class StopInfoProvider {
 	}
 	getDetailedStopInfo(stop) {
 		const now = getGtfsTime(Date.now(), gtfsRoutes);
-		var departures = [];
+		var departures = [], realtimeDepartures = [];
 		for(const [trip, stopIndOfTrip] of stop.trips) {
 			const departureTime = trip.stopDep[stopIndOfTrip];
-			if(departureTime < now) continue;
-			departures.push([trip.route.name, trip.route.color, departureTime, trip.stops.at(-1).name]);
-			if(departures.length > 10) break;
+			const isRealtime = departureTime != trip.stopArr[stopIndOfTrip];
+			if(departureTime < now-20) continue;
+			var departure = [trip.route.name, trip.route.color, departureTime, trip.stops.at(-1).name, isRealtime];
+			if(isRealtime) {
+				realtimeDepartures.push(departure);
+			} else {
+				departures.push(departure);
+			}
 		}
+		const extraDepartureCount = Math.max(10 - realtimeDepartures.length, 0);
+		if(extraDepartureCount) {
+			if(departures.length > extraDepartureCount) { departures.length = extraDepartureCount; }
+			realtimeDepartures = realtimeDepartures.concat(departures);
+		}
+		departures = realtimeDepartures;
+		
+		departures.sort((a, b) => a[2] - b[2]); // TODO: sort stop's trip list by departure times! (then remove this line)
+		if(departures.length > 10) { departures.splice(10); }  // remove after stop trip sorted.
+		
 		departures.forEach(dep => dep[2] = gtfsTimeToDate(dep[2], gtfsRoutes)/1000);
 		return {name:stop.name, departures:departures};
 	}

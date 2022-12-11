@@ -69,6 +69,7 @@ onmessage = function(e) {
 		if('task' in e.data) {
 			if(e.data.task=='gtfs-rt') {
 				if('vehicles' in e.data && gtfsRoutes) {
+					const nowSec = Date.now()/1000;
 					e.data.vehicles.entity.forEach(e => {
 						const originalRouteId = e.vehicle.trip.route_id;
 						if(!originalRouteId) {return;}
@@ -77,6 +78,7 @@ onmessage = function(e) {
 						const route = gtfsRoutes.routes[routeId];
 						if(!route) {return;}
 						e.vehicle.vehicle.label = route.name+' > '+e.vehicle.vehicle.label;
+						UpdateTripTimes(gtfsRoutes, e.vehicle, nowSec);
 					});
 					//console.log('WORKER gtfs-rt',e.data);
 				}
@@ -108,5 +110,37 @@ onmessage = function(e) {
 				postMessage(stopInfo);
 			}
 		}
+	}
+}
+
+function UpdateTripTimes(data, vehicle, nowSec)
+{
+	// Get trip for vehicle
+	const tripInd = data.tripMap[vehicle.trip.trip_id];
+	// If null -> stop
+	if(tripInd === undefined) return;
+	var trip = data.trips[tripInd];
+	// Find the vehicle's next stop in trip.stops
+	const vstopId = data.stopMap[vehicle.stop_id];
+	if(vstopId === undefined) return;
+	var tstopInd = 0;
+	while(trip.stops[tstopInd]._id != vstopId && tstopInd < trip.stops.length) {tstopInd++;}
+	if(tstopInd == trip.stops.length) return;
+	// If nextStopInd == 0 then don't do anything
+	if(tstopInd == 0) return;
+	// Next stop arrival time: (vehicleDistanceToStop/prevStopDistanceToStop)*(arrivalToStop-arrivalToPrevStop) - (Now - vehiclePosTimestamp)
+	const prevStopDistanceToStop = trip.stopShapeDist[tstopInd] - trip.stopShapeDist[tstopInd-1];
+	const remainingTransitRatio = vehicle.vehicle[".realcity.vehicle"].stop_distance / prevStopDistanceToStop;
+	const calculatedArrivalInSec = remainingTransitRatio * (trip.stopArr[tstopInd] - trip.stopArr[tstopInd-1]) - (nowSec - vehicle.timestamp);
+	const calculatedArrivalTime = (nowSec % 86400)+calculatedArrivalInSec+(new Date().getTimezoneOffset())*-60; // TODO: change %86400 to handle overlapping days.
+	// Calculate diff between expected arrival and calculated arrival
+	const delay = calculatedArrivalTime - trip.stopArr[tstopInd];
+	
+	for(var si = 0; si < tstopInd; si++) {
+		trip.stopDep[si]=Math.min(trip.stopArr[si], trip.stopArr[si]+delay);
+	}
+	// Apply diff to each stopArr and stopDep array element in trip
+	for(var si = tstopInd; si < trip.stops.length; si++) {
+		trip.stopDep[si]=trip.stopArr[si]+delay;
 	}
 }
