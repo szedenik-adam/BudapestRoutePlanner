@@ -22,7 +22,6 @@ var gtfsRoutes, db, stopInfoProvider = null;
 
 async function initGTFS()
 {
-	
 	try {
 		db = await idb.openDb('gtfs', 3, db => {
 			for(const name of db.objectStoreNames) {
@@ -108,6 +107,48 @@ onmessage = function(e) {
 				var stopInfo = stopInfoProvider.getDetailedStopInfo(stop);
 				stopInfo.task = 'stopInfo';
 				postMessage(stopInfo);
+			}
+		}
+		if(e.data.task=='timing') {
+			const src = {lat:e.data.src[0], lon:e.data.src[1]};
+			for(var target of e.data.targets) { target.arrivals = {}; target.quickArrivals = {}; target.check = true; target.checkQuick = true; }
+			
+			for(const startTimeDelayMinutes of [0,1,3,5,7]) {
+				const startTime = Date.now() + startTimeDelayMinutes*60000;
+				var checkQuickRoutes = false;
+				for(var target of e.data.targets) {
+					if(!target.check) {
+						if(target.checkQuick) {checkQuickRoutes = true;}
+						continue;
+					}
+					var duration = route(src, {lat:target.dst[0],lon:target.dst[1]}, gtfsRoutes, {ret:'duration',startTime:startTime});
+					target.arrivals[startTimeDelayMinutes] = duration*1000+startTime;
+					if(duration*1000+startTime > target.expiration) { checkQuickRoutes = true; target.check = false;}
+				}
+				if(startTimeDelayMinutes==7 && !checkQuickRoutes) {e.data.last=true;}
+				postMessage(e.data);
+				console.log('gtfs timing', e.data);
+
+				if(checkQuickRoutes) {
+					delete gtfsRoutes.last;
+					walkSpeed *= 2;
+					transferWait /= 2;
+					try {
+						for(var target of e.data.targets) {
+							if(!target.checkQuick) {continue;}
+								if(target.arrivals[startTimeDelayMinutes]===undefined || target.arrivals[startTimeDelayMinutes] > target.expiration) {
+								var duration = route(src, {lat:target.dst[0],lon:target.dst[1]}, gtfsRoutes, {ret:'duration',startTime:startTime});
+								target.quickArrivals[startTimeDelayMinutes] = duration*1000+startTime;
+								if(duration*1000+startTime > target.expiration) { target.checkQuick = false;}
+							}
+						}
+					} catch(e){console.log('Exception in quick route calculation',e);}
+					walkSpeed /= 2;
+					transferWait *= 2;
+					if(startTimeDelayMinutes==7) {e.data.last=true;}
+					postMessage(e.data);
+					console.log('gtfs quick timing', e.data);
+				}
 			}
 		}
 	}

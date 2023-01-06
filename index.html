@@ -20,6 +20,9 @@
 	<script type="text/javascript" charset="utf-8" src="scripts/external/protobuf.minimal.min.js"></script>
 	<script type="text/javascript" charset="utf-8" src="scripts/external/protobuf-gtfs-realcity.js"></script>
 	<script type="text/javascript" charset="utf-8" src="scripts/realtime.js"></script>
+	<script type="text/javascript" charset="utf-8" src="scripts/external/inflate_stream.min.js"></script>
+	<script type="text/javascript" charset="utf-8" src="scripts/destinations_ui.js"></script>
+	<script type="text/javascript" charset="utf-8" src="scripts/discordIntegration.js"></script>
 	<script>
 		var map, mapUI, stopDrawUI, route, countdown, realtime, realtimeUI, workerPromises;
 		var gtfs, gtfsRoutes, gtfsWorker, progress;
@@ -34,6 +37,7 @@
 				center: [19.06086, 47.52918],
 				zoom: 12
 			});
+
 			map.doubleClickZoom.disable();
 			map.touchZoomRotate.disableRotation();
 			try{map.touchZoomRotate._tapDragZoom.disable();}catch(e){console.warn("Failed to disable tap-drag-zoom!");}
@@ -59,6 +63,7 @@
 
 			map.addControl(new MenuControl(),'top-left');
 			map.addControl(new IsochroneControl(),'top-left');
+			map.addControl(new DestinationsControl(),'top-left');
 
 			route = new Route(mapUI);
 			progress = new ProgressBar();
@@ -100,6 +105,9 @@
 				if('task' in e.data && e.data.task == 'stopInfo') {
 					stopDrawUI.showStopDetailedInfo(e.data);
 				}
+				if('task' in e.data && e.data.task == 'timing' && dsts) {
+					dsts.processRouteStats(e.data);
+				}
 				workerPromises.checkMessageFromWorker(e.data);
 			}
 			mapUI.setWorker(gtfsWorker);
@@ -137,6 +145,14 @@
 			<div id="progressContent">
 				<div id="progressTitle">Sample Title</div>
 				<div id="progressBarDiv"><progress id="progressBar" max="100" value="70">70%</progress></div>
+			</div>
+		</div>
+		<div id="trackerBarContainer" class="bottomContainer hidden">
+			<div id="trackerContent">
+				<div class="hide" onclick="this.parentElement.parentElement.classList.add('hidden')">X</div>
+				<div class="title">destinations</div>
+				<div class="destinations">
+				</div>
 			</div>
 		</div>
 	</body>
