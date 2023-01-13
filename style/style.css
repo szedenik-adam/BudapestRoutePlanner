@@ -230,6 +230,17 @@ body {
 	color: #707570;
 }
 
+#trackerBarContainer {
+	max-height: 50%;
+}
+#trackerContent {
+	display: inline-grid;
+}
+#trackerContent .destinations {
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
 #trackerContent .hide {
 	float: right;
 	position: absolute;
