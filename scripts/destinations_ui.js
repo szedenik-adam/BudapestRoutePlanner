@@ -49,6 +49,13 @@ class DestinationsUI {
 		if(targetId) {this.removeTargetById(targetId);}
 	}
 	
+	cleanup() {
+		for(const [id, target] of Object.entries(this.targets)) {
+			if(!('quickArrivals' in target)) { continue; }
+			if(target.quickArrivals['0' ] >= target.expiration) {this.removeTargetById(id);}
+		}
+	}
+	
 	isDuplicate(target) {
 		for(const t of Object.values(this.targets)) {
 			if(target.name == t.name && target.details == t.details && Math.floor(target.expiration.getTime()/1000) == Math.floor(t.expiration.getTime()/1000) && target.location[0] == t.location[0] && target.location[1] == t.location[1]) {

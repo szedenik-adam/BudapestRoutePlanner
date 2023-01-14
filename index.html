@@ -149,8 +149,12 @@
 		</div>
 		<div id="trackerBarContainer" class="bottomContainer hidden">
 			<div id="trackerContent">
-				<div class="hide" onclick="this.parentElement.parentElement.classList.add('hidden')">X</div>
-				<div class="title">destinations</div>
+				<div class="titleRow">
+					<div class="hide button" onclick="this.parentElement.parentElement.parentElement.classList.add('hidden')">&#10060;</div>
+					<div class="cleanup button" onclick="dsts.cleanup()">&#129529;</div>
+					<div class="refresh button" onclick="dsts.updateRouteStats(false)">&#128260;</div>
+					<div class="title">destinations</div>
+				</div>
 				<div class="destinations">
 				</div>
 			</div>
