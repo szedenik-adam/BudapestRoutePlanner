@@ -15,6 +15,7 @@ class DestinationsControl {
 		const trackerPanel = document.getElementById('trackerBarContainer');
 		if(trackerPanel.classList.contains('hidden')) {
 			trackerPanel.classList.remove('hidden');
+			if(dsts == null) {InitDiscord();}
 		} else {
 			InitDiscord();
 		}
