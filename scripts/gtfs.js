@@ -1138,7 +1138,7 @@ function route(start, end, data, options={})
 		var h = (t % 24).toFixed(0);
 		return h+':'+('00'+m).slice(-2)
 	}
-	return {'path':path, 'steps':bestRouteHistory, lastStep:bestLastStep, 'perf_sec':performanceDuration/1000};
+	return {'path':path, 'steps':bestRouteHistory, 'perf_sec':performanceDuration/1000};
 }
 
 function collectSimilarRoutes(srcStop, dstStop, srcStartTime, routeIds)

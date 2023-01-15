@@ -76,7 +76,6 @@
 					console.log('got route', e.data);
 					mapUI.routeReceived();
 					route.drawRoute(e.data.route.path);
-					e.data.route.steps.push(e.data.route.lastStep);
 					showRoute(e.data.route.steps);
 					document.getElementById('routeInfoContainer').classList.remove('hidden');
 				}
