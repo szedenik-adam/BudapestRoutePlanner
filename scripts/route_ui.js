@@ -345,15 +345,20 @@ class ProgressBar {
 	setTitle(title){document.getElementById("progressTitle").textContent=title; return this;}
 	setProgress(progress){document.getElementById("progressBar").value=progress*100; return this;}
 }
-
-function fmtTime(t) { // also defined in gtfs.js (todo: move to common file!)
+const fmtTimeMode = {
+	default: 0,
+	withSeconds: 1,
+	hourOptional: 2,
+}
+function fmtTime(t, options = fmtTimeMode.default) { // also defined in gtfs.js (todo: move to common file!)
 	t = t % 86400;
 	var s = (t % 60).toFixed(0);
 	t = Math.floor(t/60);
 	var m = (t % 60).toFixed(0);
 	t = Math.floor(t/60);
 	var h = (t % 24).toFixed(0);
-	return h+':'+('00'+m).slice(-2)
+	const writeHours = t || !(options&fmtTimeMode.hourOptional);
+	return (writeHours?(h+':'+('00'+m).slice(-2)):m)+((options&fmtTimeMode.withSeconds)?(':'+('00'+s).slice(-2)):(''))
 }
 function showRoute(steps)
 {
@@ -400,4 +405,51 @@ function showRoute(steps)
 		}
 	}
 	routeHolder.innerHTML = routeContent;
+	
+	const detailedInfoHolder = panel.getElementsByClassName('details')[0];
+	detailedInfoHolder.innerHTML = createDetailedRouteInfo(steps);
+}
+
+function createDetailedRouteInfo(steps)
+{
+	const walkSpeed = 5/3600;
+	var htmlRows = [];
+	var lastStop = '';
+	for(const [si, step] of steps.entries()) {
+		if('task' in step && step.task == 'wait') { continue; }
+		if('task' in step && step.task == 'walk') {
+			const waitTime = (si+1 < steps.length && 'task' in steps[si+1] && steps[si+1].task == 'wait') ? steps[si+1].duration : 0;
+			const walkTime = step.duration;
+			const distanceKm = turf.distance(turf.point(step.points[0]), turf.point(step.points[1]));
+			const distanceM = Math.ceil(distanceKm*1000);
+			console.log('dddd', distanceM, walkSpeed, walkTime, waitTime);
+			const pacePercent = Math.round(100*(distanceKm/walkSpeed) / (walkTime+waitTime));
+			
+			const waitCellContent = waitTime ? `<span class="waitSymbol"></span><span>${fmtTime(waitTime, fmtTimeMode.withSeconds|fmtTimeMode.hourOptional)}</span>` :'';
+			htmlRows.push(`<tr>
+							<td style="line-height:0px" class="vehicle"><span class="walkSymbol"></span></td>
+							<td class="time"><span>${fmtTime(walkTime, fmtTimeMode.withSeconds|fmtTimeMode.hourOptional)}</span></td>
+							<td class="distance"><span>${distanceM}m</span></td>
+							<td class="speed"><span class="gaugeSymbol"></span><span>${pacePercent}%</span></td>
+							<td class="vehicle">${waitCellContent}</td>
+						  </tr>`);
+		}
+		if('routeName' in step) {
+			const delay = 0;
+			const delayCellContent = delay ? `<span class="delaySymbol"></span><span>1:10</span>` : '';
+			htmlRows.push(`<tr class="internal">
+							<td rowspan="2" class="vehicle"><span class="hsList"> <span style="background-color:#${step.color[0]};color:#${step.color[1]}"><span>${step.routeName}</span></span> </span></td>
+							<td class="time"><span>${fmtTime(step.start, fmtTimeMode.withSeconds)}</span></td>
+							<td colspan="2">${lastStop}</td>
+							<td class="vehicle">${delayCellContent}</td>
+						</tr>
+						<tr>
+							<td><span>${fmtTime(step.end, fmtTimeMode.withSeconds)}</span></td>
+							<td colspan="2">${step.dstStop}</td>
+						</tr>`);
+		}
+		if('dstStop' in step){ lastStop = step.dstStop; }
+	}
+	const table = '<table>'+htmlRows.join('')+'</table>';
+	return table;
 }
