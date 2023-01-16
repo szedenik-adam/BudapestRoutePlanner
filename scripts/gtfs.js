@@ -1010,16 +1010,11 @@ function route(start, end, data, options={})
 								task: 'wait',
 								duration: (trip.stopDep[stopInd]+offset) - checkStop.arr.time + transferWait,
 							})
-							var points = getShapePoints(data.shapes[trip.shape_id], trip.stopShapeDist[stopInd], trip.stopShapeDist[i]);
-							var stops = [];
-							for (var j = stopInd; j <= i; j++) stops.push([trip.stops[j].lon,trip.stops[j].lat]);
 							stop.arr.history.push({
 								dstStop:stop,
 								trip: trip,
 								tripStopInd: stopInd,
 								duration: trip.stopDep[i] - trip.stopDep[stopInd],
-								points:points,
-								stops:stops,
 								start:trip.stopDep[stopInd]+offset,
 								end:  trip.stopDep[i]+offset,
 							})
@@ -1102,6 +1097,16 @@ function route(start, end, data, options={})
 				}
 				step.routeName = step.trip.route.name;
 				step.color = step.trip.route.color;
+
+				var stops = [];
+				var dstStopInd = step.trip.stops.length-1;
+				for (var j = step.tripStopInd; j <= dstStopInd; j++) {
+					stops.push([step.trip.stops[j].lon,step.trip.stops[j].lat]);
+					if(step.trip.stops[j] == step.dstStop) {dstStopInd=j; break;}
+				}
+				var points = getShapePoints(data.shapes[step.trip.shape_id], step.trip.stopShapeDist[step.tripStopInd], step.trip.stopShapeDist[dstStopInd]);
+				step.points = points;
+				step.stops = stops;
 			}
 			step.delay = step.trip.stopDep[step.tripStopInd] - step.trip.stopArr[step.tripStopInd]; console.log('delay:',step.delay);
 		}
