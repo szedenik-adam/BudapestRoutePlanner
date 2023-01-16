@@ -351,6 +351,9 @@ const fmtTimeMode = {
 	hourOptional: 2,
 }
 function fmtTime(t, options = fmtTimeMode.default) { // also defined in gtfs.js (todo: move to common file!)
+	var sign='';
+	if(t<0){t*=-1; sign='-';}
+	
 	t = t % 86400;
 	var s = (t % 60).toFixed(0);
 	t = Math.floor(t/60);
@@ -358,7 +361,7 @@ function fmtTime(t, options = fmtTimeMode.default) { // also defined in gtfs.js 
 	t = Math.floor(t/60);
 	var h = (t % 24).toFixed(0);
 	const writeHours = t || !(options&fmtTimeMode.hourOptional);
-	return (writeHours?(h+':'+('00'+m).slice(-2)):m)+((options&fmtTimeMode.withSeconds)?(':'+('00'+s).slice(-2)):(''))
+	return sign+(writeHours?(h+':'+('00'+m).slice(-2)):m)+((options&fmtTimeMode.withSeconds)?(':'+('00'+s).slice(-2)):(''))
 }
 function showRoute(steps)
 {
@@ -422,7 +425,6 @@ function createDetailedRouteInfo(steps)
 			const walkTime = step.duration;
 			const distanceKm = turf.distance(turf.point(step.points[0]), turf.point(step.points[1]));
 			const distanceM = Math.ceil(distanceKm*1000);
-			console.log('dddd', distanceM, walkSpeed, walkTime, waitTime);
 			const pacePercent = Math.round(100*(distanceKm/walkSpeed) / (walkTime+waitTime));
 			
 			const waitCellContent = waitTime ? `<span class="waitSymbol"></span><span>${fmtTime(waitTime, fmtTimeMode.withSeconds|fmtTimeMode.hourOptional)}</span>` :'';
@@ -435,8 +437,8 @@ function createDetailedRouteInfo(steps)
 						  </tr>`);
 		}
 		if('routeName' in step) {
-			const delay = 0;
-			const delayCellContent = delay ? `<span class="delaySymbol"></span><span>1:10</span>` : '';
+			const delay = ('delay' in step) ? step.delay : 0;
+			const delayCellContent = delay ? `<span class="delaySymbol"></span><span>${fmtTime(delay, fmtTimeMode.withSeconds|fmtTimeMode.hourOptional)}</span>` : '';
 			htmlRows.push(`<tr class="internal">
 							<td rowspan="2" class="vehicle"><span class="hsList"> <span style="background-color:#${step.color[0]};color:#${step.color[1]}"><span>${step.routeName}</span></span> </span></td>
 							<td class="time"><span>${fmtTime(step.start, fmtTimeMode.withSeconds)}</span></td>

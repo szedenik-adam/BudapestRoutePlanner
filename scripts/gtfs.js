@@ -994,13 +994,13 @@ function route(start, end, data, options={})
 
 			checkStop.trips.forEach(function (entry) {
 				var trip = entry[0];
-				var index = entry[1];
+				var stopInd = entry[1];
 				trip.dates.forEach(function (date) {
 					var offset = date*86400;
-					var depTime = offset + trip.stopDep[index];
+					var depTime = offset + trip.stopDep[stopInd];
 					if (depTime > endTime) return;
 					if (depTime < minTime) return;
-					for (var i = index+1; i < trip.stopDep.length; i++) {
+					for (var i = stopInd+1; i < trip.stopDep.length; i++) {
 						var stop = trip.stops[i];
 						var arrTime =  offset+trip.stopDep[i]+transferWait;
 						if (arrTime < stop.arr.time) {
@@ -1008,19 +1008,19 @@ function route(start, end, data, options={})
 							stop.arr.history = checkStop.arr.history.slice(0)
 							stop.arr.history.push({
 								task: 'wait',
-								duration: (trip.stopDep[index]+offset) - checkStop.arr.time + transferWait,
+								duration: (trip.stopDep[stopInd]+offset) - checkStop.arr.time + transferWait,
 							})
-							var points = getShapePoints(data.shapes[trip.shape_id], trip.stopShapeDist[index], trip.stopShapeDist[i]);
+							var points = getShapePoints(data.shapes[trip.shape_id], trip.stopShapeDist[stopInd], trip.stopShapeDist[i]);
 							var stops = [];
-							for (var j = index; j <= i; j++) stops.push([trip.stops[j].lon,trip.stops[j].lat]);
+							for (var j = stopInd; j <= i; j++) stops.push([trip.stops[j].lon,trip.stops[j].lat]);
 							stop.arr.history.push({
 								dstStop:stop,
-								route: trip.route,
-								duration: trip.stopDep[i] - trip.stopDep[index],
+								trip: trip,
+								tripStopInd: stopInd,
+								duration: trip.stopDep[i] - trip.stopDep[stopInd],
 								points:points,
 								stops:stops,
-								color:'#'+trip.route.color[0],
-								start:trip.stopDep[index]+offset,
+								start:trip.stopDep[stopInd]+offset,
 								end:  trip.stopDep[i]+offset,
 							})
 						}
@@ -1083,29 +1083,32 @@ function route(start, end, data, options={})
 	bestStop.arr.history.push(bestLastStep);
 	
 	bestStop.arr.history.forEach(function (step, si) {
-		if('route' in step) {
-			const srcStep = si>1 && 'dstStop' in bestStop.arr.history[si-1] ? bestStop.arr.history[si-1] : (si>1 && 'dstStop' in bestStop.arr.history[si-2] ? bestStop.arr.history[si-2] : null);
-			if(srcStep && 'dstStop' in step) {
-				const srcStop = srcStep.dstStop;
-				const srcStartTime = srcStep.start;
-				routeIds = collectSimilarRoutes(srcStop, step.dstStop, srcStartTime, [step.route._id]);
-				routeIds.shift();
-				step.altRoutes = routeIds.map(rid => [data.routes[rid].name, data.routes[rid].color]);
-				step.altRoutes.sort((a,b)=> {
-				  if (parseInt(a[0]) < parseInt(b[0])) return -1;
-				  if (parseInt(a[0]) > parseInt(b[0])) return 1;
-				  if (a[0] < b[0]) return -1;
-				  if (a[0] > b[0]) return 1;
-				  return 0;
-				});
+		if('trip' in step) {
+			if(!('routeName' in step)){
+				const srcStep = si>1 && 'dstStop' in bestStop.arr.history[si-1] ? bestStop.arr.history[si-1] : (si>1 && 'dstStop' in bestStop.arr.history[si-2] ? bestStop.arr.history[si-2] : null);
+				if(srcStep && 'dstStop' in step) {
+					const srcStop = srcStep.dstStop;
+					const srcStartTime = srcStep.start;
+					routeIds = collectSimilarRoutes(srcStop, step.dstStop, srcStartTime, [step.trip.route._id]);
+					routeIds.shift();
+					step.altRoutes = routeIds.map(rid => [data.routes[rid].name, data.routes[rid].color]);
+					step.altRoutes.sort((a,b)=> {
+					  if (parseInt(a[0]) < parseInt(b[0])) return -1;
+					  if (parseInt(a[0]) > parseInt(b[0])) return 1;
+					  if (a[0] < b[0]) return -1;
+					  if (a[0] > b[0]) return 1;
+					  return 0;
+					});
+				}
+				step.routeName = step.trip.route.name;
+				step.color = step.trip.route.color;
 			}
-			step.routeName = step.route.name;
-			step.color = step.route.color;
-			delete step.route;
+			step.delay = step.trip.stopDep[step.tripStopInd] - step.trip.stopArr[step.tripStopInd]; console.log('delay:',step.delay);
 		}
 	});
 
 	var bestRouteHistory = bestStop.arr.history.map(step => {return {...step}});
+	bestRouteHistory.forEach(step => {if('trip' in step) delete step.trip;});
 	bestStop.arr.history.pop();
 
 	bestRouteHistory.forEach(function (step) {
