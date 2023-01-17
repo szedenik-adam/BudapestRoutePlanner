@@ -18,7 +18,7 @@ importScripts('external/s2geometry.min.js');
 importScripts('s2_extension.js');
 importScripts('stop_worker.js');
 
-var gtfsRoutes, db, stopInfoProvider = null;
+var gtfsRoutes, db, stopInfoProvider = null, cachedRealtimeVehicleFeed = null;
 
 async function initGTFS()
 {
@@ -38,6 +38,12 @@ async function initGTFS()
 
 	var timetableInfo = await LoadTimeTable();
 	gtfsRoutes = timetableInfo.routes;
+	
+	if(cachedRealtimeVehicleFeed) {
+		ProcessRealTimeVehicleFeed(cachedRealtimeVehicleFeed.vehicles);
+		postMessage(cachedRealtimeVehicleFeed);
+		cachedRealtimeVehicleFeed = null;
+	}
 	
 	var result = route({lat:47.49990791402583,lon:19.080153604244394}, {lat:47.55545590531613,lon:19.043956781329452}, gtfsRoutes);
 	console.log('sending route to UI thread');
@@ -65,25 +71,21 @@ onmessage = function(e) {
 		postMessage({rowInd:e.data.rowInd, row:e.data.row});
 	}
 	else if('taskNum' in e.data) {
+		var sendResponse = true;
 		if('task' in e.data) {
 			if(e.data.task=='gtfs-rt') {
-				if('vehicles' in e.data && gtfsRoutes) {
-					const nowSec = Date.now()/1000;
-					e.data.vehicles.entity.forEach(e => {
-						const originalRouteId = e.vehicle.trip.route_id;
-						if(!originalRouteId) {return;}
-						const routeId = gtfsRoutes.routeMap[originalRouteId];
-						if(!routeId) {return;}
-						const route = gtfsRoutes.routes[routeId];
-						if(!route) {return;}
-						e.vehicle.vehicle.label = route.name+' > '+e.vehicle.vehicle.label;
-						UpdateTripTimes(gtfsRoutes, e.vehicle, nowSec);
-					});
+				if('vehicles' in e.data) {
+					if(gtfsRoutes) {
+						ProcessRealTimeVehicleFeed(e.data.vehicles);
+					} else {
+						cachedRealtimeVehicleFeed = e.data;
+						sendResponse = false;
+					}
 					//console.log('WORKER gtfs-rt',e.data);
 				}
 			}
 		}
-		postMessage(e.data);
+		if(sendResponse) { postMessage(e.data); }
 	}
 	else if('task' in e.data) {
 		if(e.data.task=='s2') {
@@ -154,6 +156,20 @@ onmessage = function(e) {
 	}
 }
 
+function ProcessRealTimeVehicleFeed(vehicles)
+{
+	const nowSec = Date.now()/1000;
+	vehicles.entity.forEach(e => {
+		const originalRouteId = e.vehicle.trip.route_id;
+		if(!originalRouteId) {return;}
+		const routeId = gtfsRoutes.routeMap[originalRouteId];
+		if(!routeId) {return;}
+		const route = gtfsRoutes.routes[routeId];
+		if(!route) {return;}
+		e.vehicle.vehicle.label = route.name+' > '+e.vehicle.vehicle.label;
+		UpdateTripTimes(gtfsRoutes, e.vehicle, nowSec);
+	});
+}
 function UpdateTripTimes(data, vehicle, nowSec)
 {
 	// Get trip for vehicle
