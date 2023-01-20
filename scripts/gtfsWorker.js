@@ -147,7 +147,7 @@ onmessage = function(e) {
 					} catch(e){console.log('Exception in quick route calculation',e);}
 					walkSpeed /= 2;
 					transferWait *= 2;
-					if(startTimeDelayMinutes==7) {e.data.last=true;}
+					if(startTimeDelayMinutes==7) {delete e.data.last;}
 					postMessage(e.data);
 					console.log('gtfs quick timing', e.data);
 				}
