@@ -103,7 +103,6 @@ class Discord {
 					var expirationTime = new Date();
 					expirationTime.setHours(hour, min, 0);
 					if(expirationTime.getTime()-now.getTime() < -22*3600*1000) { expirationTime.setDate(expirationTime.getDate() + 1); }
-					console.log('Found poke from bud:', name, imageUrl, details, location, expirationTime, msgE);
 					
 					result = {name:name, location:location, details:details, expiration:expirationTime, imageUrl:imageUrl, id:id};
 				} catch (e) {
@@ -112,7 +111,7 @@ class Discord {
 				}
 			}
 		}
-		if(result!=null && 'details' in result && result.details.indexOf('100%')==-1 && result.details.indexOf('PVP:')==-1) result = null;
+		if(result!=null && 'details' in result && result.details.indexOf('100%')==-1) result = null;
 		return result;
 	}
 	
