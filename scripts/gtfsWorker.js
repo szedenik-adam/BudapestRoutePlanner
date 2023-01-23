@@ -182,7 +182,7 @@ function UpdateTripTimes(data, vehicle, nowSec)
 	const vstopId = data.stopMap[vehicle.stop_id];
 	if(vstopId === undefined) return;
 	var tstopInd = 0;
-	while(trip.stops[tstopInd]._id != vstopId && tstopInd < trip.stops.length) {tstopInd++;}
+	while(tstopInd < trip.stops.length && trip.stops[tstopInd]._id != vstopId) {tstopInd++;}
 	if(tstopInd == trip.stops.length) return;
 	// If nextStopInd == 0 then don't do anything
 	if(tstopInd == 0) return;
