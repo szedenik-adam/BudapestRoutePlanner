@@ -81,35 +81,6 @@ class Discord {
 					return null;
 				}
 			}
-			if('fields' in msgE && msgE.fields.length >= 3 && 'name' in msgE.fields[0] && (nameMatch = msgE.fields[0].name.match(/\*\*(.*?)\*\*/))){
-				try {
-					const id = message.id;
-					const name = nameMatch[1];
-					const imageUrl = msgE.thumbnail.url.replaceAll('uicons','uicons-outline');
-					
-					const detailsMatch = msgE.fields[0].name.replaceAll('\n',' ').match(/([0-9]*\/[0-9]*\/[0-9]* .*?CP [0-9]*)/);
-					var details = detailsMatch[1];
-				
-					var locationMatch = msgE.fields[2].value.match(/www.google.com\/maps\?q=([0-9|\.]*),([0-9|\.]*)/);
-					if(locationMatch==null) {
-						locationMatch = msgE.fields[3].value.match(/www.google.com\/maps\?q=([0-9|\.]*),([0-9|\.]*)/);
-						details += ' PVP:'+msgE.fields[2].value;
-					}
-					const location = [parseFloat(locationMatch[1]),parseFloat(locationMatch[2])];
-					
-					const expirationTimeMatch = msgE.fields[1].name.match(/([0-9]*):([0-9]*) ([A|P]M)/);
-					const hour = parseInt(expirationTimeMatch[1])+((expirationTimeMatch[3]=='PM'&&expirationTimeMatch[1]!='12')?12:0);
-					const min = parseInt(expirationTimeMatch[2]);
-					var expirationTime = new Date();
-					expirationTime.setHours(hour, min, 0);
-					if(expirationTime.getTime()-now.getTime() < -22*3600*1000) { expirationTime.setDate(expirationTime.getDate() + 1); }
-					
-					result = {name:name, location:location, details:details, expiration:expirationTime, imageUrl:imageUrl, id:id};
-				} catch (e) {
-					console.log('parseTargetFromMessage bud error:',e, msgE);
-					return null;
-				}
-			}
 		}
 		if(result!=null && 'details' in result && result.details.indexOf('100%')==-1) result = null;
 		return result;
@@ -133,36 +104,6 @@ class Discord {
 			console.log(response);
 		});
 
-	  fetch('https://discord.com/api/v9/channels/544211892198178816/messages?limit=5', { // pokebud IV-100 history
-			headers: {
-				'Authorization': access_token
-			}
-	  }).then((response) => {
-		  if(!response.ok || response.status!=200){
-			  console.log('recent message fetch not ok, clearing access token');
-			  localStorage.removeItem('access_token');
-		  }
-		  return response.json();
-		})
-		.then((response) => {
-			console.log(response);
-			try {
-				const now = new Date();
-				for(const message of response) {
-					const target = this.parseTargetFromMessage(message, now);
-					if(target) {
-						this.targets[target.id] = target;
-						console.log('DC got target:', target);
-					}
-				}
-				if(this.targets){
-					dsts.pushChanges(this.targets);
-					this.targets = {};
-				}
-			}
-			catch(e){console.error('DC: Last messages\' reading failed (bud)!', e);}
-		});
-		
 	  fetch('https://discord.com/api/v9/channels/1008308476566577212/messages?limit=5', { // szfvar IV-100 history
 			headers: {
 				'Authorization': access_token
