@@ -179,7 +179,40 @@ class DestinationsUI {
 				}
 				statDiv.setAttribute('class','destStat '+statStyle);
 			}
+
+			if(window.hidden) {
+				if ("Notification" in window) {
+					if (Notification.permission === "granted") {
+						this.showNotification(this.targets[target.id]);
+					} else if (Notification.permission !== "denied") {
+						Notification.requestPermission().then((permission) => {
+							if (permission === "granted") {
+								this.showNotification(this.targets[target.id]);
+							}
+						});
+					}
+				}
+			}
 		}
+	}
+	
+	showNotification(target) {
+		var arrivals = Object.entries(target.arrivals).map(arrival => {
+			const remainingMs = target.expiration - arrival[1];
+			return remainingMs>0 ? (arrival[0]+': '+Math.round(remainingMs/6000)/10) : '';
+		});
+		arrivals = (arrivals.length> 0  && arrivals[0].length > 0) ? ('['+arrivals.join(', ')+']') : '';
+		var quickArrivals = Object.entries(target.quickArrivals).map(arrival => {
+			const remainingMs = target.expiration - arrival[1];
+			return remainingMs>0 ? (arrival[0]+': '+Math.round(remainingMs/6000)/10) : '';
+		});
+		if(quickArrivals.length> 0  && quickArrivals[0].length > 0) arrivals += ' [Q '+quickArrivals.join(', ')+']';
+		else arrivals = 'unreachable';
+		
+		var noti = new Notification(target.name, {icon:target.imageUrl, body:arrivals+' '+target.details, requireInteraction:true, tag:target.id});
+		noti.onclick= (event)=>{dsts.setRouteTo(target.location[0], target.location[1])};
+		target.noti = noti;
+		console.log('new notification', noti, target, arrivals);
 	}
 	
 	setRouteTo(lat, lng) {
