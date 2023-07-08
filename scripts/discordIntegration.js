@@ -59,16 +59,18 @@ class Discord {
 				try {
 					const id = message.id;
 					const name = nameMatch[1];
-					const imageUrl = msgE.thumbnail.url.replaceAll('uicons','uicons-outline');
+					var imageUrl = '';
+					if('thumbnail' in msgE) imageUrl = msgE.thumbnail.url.replaceAll('uicons','uicons-outline');
+					else imageUrl = `https://cdn.discordapp.com/avatars/${message.author.id }/${message.author.avatar }.webp?size=80`;
 					
 					var locationMatch = msgE.description.match(/www.google.com\/maps\/search\/\?[\w|=|&]*?&query=([0-9|\.]*),([0-9|\.]*)/);
 					if(locationMatch == null) locationMatch = msgE.description.match(/maps.google.com\/maps\?q=([0-9|\.]*),([0-9|\.]*)/);
 					const location = [parseFloat(locationMatch[1]),parseFloat(locationMatch[2])];
 					
-					const detailsMatch = msgE.description.match(/Szint: ([0-9]*) - CP: ([0-9]*) - IV: ([0-9]*)%\nA:([0-9]*) - D:([0-9]*) - S:([0-9]*)/);
+					const detailsMatch = msgE.description.match(/Szint:\*\* ([0-9]*) - \*\*CP:\*\* ([0-9]*) - \*\*IV:\*\* ([0-9]*)%\n\*\*A:\*\*([0-9]*) - \*\*D:\*\*([0-9]*) - \*\*S:\*\*([0-9]*)/);
 					const details = `${detailsMatch[4]}/${detailsMatch[5]}/${detailsMatch[6]} (${detailsMatch[3]}%) | CP ${detailsMatch[2]} | Level ${detailsMatch[1]}`;
 					
-					const expirationTimeMatch = msgE.description.match(/Elérhető: (.*?)-ig/);
+					const expirationTimeMatch = msgE.description.match(/\*\*Elérhető:\*\* (.*?)-ig/);
 					const expirationTimeStr = expirationTimeMatch[1];
 					var expirationTime = new Date();
 					const timePartsMatch = expirationTimeStr.match(/([0-9]*):([0-9]*):([0-9]*)/);
