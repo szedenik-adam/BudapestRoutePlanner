@@ -37,7 +37,7 @@ var point = turf.point([-75.343, 39.984]);
 
 const dir = 'budapest/timetable'
 if (!fs.existsSync(dir)){
-    fs.mkdirSync(dir);
+    fs.mkdirSync(dir, { recursive: true });
 }
 class ProgressLinearizer { // dummy class for gtfs.js
 	constructor(a,b){}
