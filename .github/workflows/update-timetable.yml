@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '0 2 */3 * *'  # every 3 days at 02:00 UTC
   workflow_dispatch:       # manual trigger
+    inputs:
+      skip_cache:
+        description: 'Skip timetable cache and regenerate'
+        type: boolean
+        default: false
 
 jobs:
   generate:
@@ -20,15 +25,30 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Cache timetable
+        id: cache
+        if: github.event_name == 'schedule' || !inputs.skip_cache
+        uses: actions/cache@v4
+        with:
+          path: timetable-generator/budapest
+          key: timetable-${{ runner.os }}-${{ hashFiles('timetable-generator/genDays.js', 'scripts/gtfs.js', 'scripts/walk_route.js', 'scripts/bridgeBuilder.js', 'scripts/external/turf.min.js', 'scripts/external/jszip.min.js', 'all.geojson') }}-${{ hashFiles('timetable-generator/budapest_static_map_files.zip') }}-${{ format('{0:yyyy}-{0:MM}-{0:DD}', now()) }}
+          restore-keys: |
+            timetable-${{ runner.os }}-${{ hashFiles('timetable-generator/genDays.js', 'scripts/gtfs.js', 'scripts/walk_route.js', 'scripts/bridgeBuilder.js', 'scripts/external/turf.min.js', 'scripts/external/jszip.min.js', 'all.geojson') }}-${{ hashFiles('timetable-generator/budapest_static_map_files.zip') }}-
+
       - name: Generate timetable
+        if: steps.cache.outputs.cache-hit != 'true'
         run: cd timetable-generator && ./update.sh --generate-only
 
       - name: Run tests
         id: tests
         continue-on-error: true
         run: |
-          sudo apt-get install -y geckodriver
-          cd timetable-generator && xvfb-run --auto-servernum --server-args="-screen 0 1280x800x24" ./test/run-ci.sh
+          sudo apt-get install -y xvfb
+          cd timetable-generator
+          # Install geckodriver
+          GD_VERSION=$(curl -s https://api.github.com/repos/mozilla/geckodriver/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+          curl -sL "https://github.com/mozilla/geckodriver/releases/download/${GD_VERSION}/geckodriver-${GD_VERSION}-linux64.tar.gz" | sudo tar xz -C /usr/local/bin
+          xvfb-run --auto-servernum --server-args="-screen 0 1280x800x24" bash ./test/run-ci.sh
 
       - name: Save test screenshot
         uses: actions/upload-artifact@v4
