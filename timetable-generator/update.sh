@@ -33,11 +33,10 @@ if [ ! -d "budapest/0" ] || [ ! -d "budapest/1" ]; then
     git lfs install
     git lfs pull
   fi
-  if [ -f "budapest/static_map_files.zip" ]; then
-    unzip -o budapest/static_map_files.zip -d budapest/
-    rm budapest/static_map_files.zip
+  if [ -f "budapest_static_map_files.zip" ]; then
+    unzip -o budapest_static_map_files.zip -d budapest/
   else
-    echo "WARNING: No LFS zip found at budapest/static_map_files.zip. Static map files must be added manually."
+    echo "WARNING: No LFS zip found at budapest_static_map_files.zip. Static map files must be added manually."
   fi
 fi
 

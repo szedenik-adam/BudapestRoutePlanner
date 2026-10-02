@@ -1,1 +1,1 @@
-timetable-generator/budapest/static_map_files.zip filter=lfs diff=lfs merge=lfs -text
+timetable-generator/budapest_static_map_files.zip filter=lfs diff=lfs merge=lfs -text
