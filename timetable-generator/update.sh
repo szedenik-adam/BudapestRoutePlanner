@@ -60,10 +60,10 @@ echo "Generating timetable for the next 7 days…"
 node --max-old-space-size=8100 genDays.js --days=7
 
 echo "Zipping timetable files…"
+mkdir -p budapest/ziptimetable
 cd budapest/timetable
 find . -type f -exec zip --compression-method deflate -9 -D '../ziptimetable/{}.zip' '{}' \;
 cd "$SCRIPT_DIR"
-mv budapest/timetable/ziptimetable budapest/ziptimetable
 rm -rf budapest/timetable
 mv budapest/ziptimetable budapest/timetable
 
