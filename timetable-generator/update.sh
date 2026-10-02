@@ -68,12 +68,7 @@ mv budapest/ziptimetable budapest/timetable
 
 # ─── Deploy to Cloudflare Pages ───
 
-echo "Files to deploy:"
-find budapest -type f | sort
-echo "All files:"
-find . -type f | sort
-
 echo "Deploying to Cloudflare Pages…"
-npx wrangler pages deploy budapest --project-name bprp
+npx wrangler pages deploy budapest --project-name bprp --env production
 
 echo "Done."
