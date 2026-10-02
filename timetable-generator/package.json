@@ -1,20 +1,7 @@
 {
-  "name": "map",
+  "name": "timetable-generator",
   "type": "module",
   "version": "1.0.0",
-  "description": "",
-  "main": "genDays.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "@radarlabs/s2": "^0.0.8",
-    "mbexplode": "^1.0.0",
-    "protobufjs": "^8.8.0",
-    "protobufjs-cli": "^2.7.0",
-    "wrangler": "^4.146.0"
-  }
+  "private": true,
+  "description": "BudapestRoutePlanner timetable generator"
 }

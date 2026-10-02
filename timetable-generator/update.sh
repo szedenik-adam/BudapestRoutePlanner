@@ -26,12 +26,6 @@ if ! command -v wrangler &>/dev/null; then
 fi
 echo "wrangler: $(wrangler --version 2>/dev/null | head -1)"
 
-# Project dependencies
-if [ ! -d "node_modules" ]; then
-  echo "Installing project dependencies…"
-  npm install
-fi
-
 # Static map files — download from LFS zip if budapest/ is missing key dirs
 if [ ! -d "budapest/0" ] || [ ! -d "budapest/1" ]; then
   echo "Static map files missing. Downloading from LFS zip…"
