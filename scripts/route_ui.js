@@ -341,7 +341,7 @@ class ProgressBar {
 	constructor () {}
 	show(){document.getElementById("progressBarContainer").classList.remove("hidden"); return this;}
 	hide(){document.getElementById("progressBarContainer").classList.add("hidden"); return this;}
-	isVisible(){return !document.getElementById("progressBarContainer").classList.contains("hidden"); return this;}
+	isVisible(){return !document.getElementById("progressBarContainer").classList.contains("hidden");}
 	setTitle(title){document.getElementById("progressTitle").textContent=title; return this;}
 	setProgress(progress){document.getElementById("progressBar").value=progress*100; return this;}
 }

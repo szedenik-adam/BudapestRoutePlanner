@@ -54,7 +54,7 @@ jobs:
         if: always()
         with:
           name: test-screenshot
-          path: timetable-generator/test/screenshot.png
+          path: test/screenshot.png
           retention-days: 7
 
       - name: Check test results

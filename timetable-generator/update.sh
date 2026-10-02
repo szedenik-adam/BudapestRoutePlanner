@@ -90,7 +90,7 @@ fi
 if [ "$MODE" = "deploy" ]; then
   echo "Deploy-only mode. Skipping generation."
   echo "Deploying to Cloudflare Pages…"
-  npx wrangler pages deploy budapest --project-name bprp --branch production
+  npx wrangler pages deploy budapest --project-name bprp --branch production --commit-dirty=true
   echo "Done."
   exit 0
 fi
@@ -139,7 +139,7 @@ LOCALJS
   echo "Then open http://localhost:8080/index.html"
 else
   echo "Deploying to Cloudflare Pages…"
-  npx wrangler pages deploy budapest --project-name bprp --branch production
+  npx wrangler pages deploy budapest --project-name bprp --branch production --commit-dirty=true
 fi
 
 echo "Done."
