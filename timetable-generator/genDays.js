@@ -47,7 +47,7 @@ class ProgressLinearizer { // dummy class for gtfs.js
 var p= new ProgressLinearizer(0,0);
 
 console.log('0');
-eval(fs.readFileSync('jszip.min.js')+'');
+eval(fs.readFileSync(resolvePath('jszip.min.js'))+'');
 console.log('1');
 include('gtfs.js');
 console.log('gtfs:',walkSpeed, GTFS);
