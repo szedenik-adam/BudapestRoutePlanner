@@ -102,21 +102,16 @@ for (const arg of args) {
   if (match) maxDays = parseInt(match[1], 10);
 }
 
+const rangeStart = parseInt(common.range[0], 10);
+const rangeEnd = parseInt(common.range[1], 10);
 const todayInt = parseInt(new Date().toISOString().split('T')[0].replace(/-/g, ''), 10);
+const limitDay = maxDays !== null ? todayInt + maxDays : rangeEnd;
 
-for(var day = common.range[0]; day<=common.range[1]; day++) {
+for(var day = rangeStart; day <= rangeEnd; day++) {
 	// Skip past days
 	if (day < todayInt) continue;
 	// Limit to next N days when --days=N is specified
-	if (maxDays !== null) {
-		const dayDate = new Date(
-			Math.floor(day / 10000),
-			Math.floor((day % 10000) / 100) - 1,
-			day % 100
-		);
-		const daysFromNow = Math.round((dayDate - new Date(new Date().toISOString().split('T')[0])) / 86400000);
-		if (daysFromNow >= maxDays) break;
-	}
+	if (day > limitDay) break;
 	var d = gtfs.serializeDay(day, common);
 	console.log('extracted', d.start_date, day-common.range[0]+1, common.range[1]-common.range[0]+1);
 	// var zip = new JSZip();
