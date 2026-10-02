@@ -1,10 +1,34 @@
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
+import { fileURLToPath } from 'url';
+import path from 'path';
 
 var fs = require('fs');
 
-function read(f) {return fs.readFileSync(f).toString();}
+// Resolve base directory: prefer repo scripts/ if it exists, otherwise use current dir
+const scriptDir = fileURLToPath(import.meta.url);
+const thisDir = path.dirname(scriptDir);
+const repoScripts = path.resolve(thisDir, '../scripts');
+const baseDir = fs.existsSync(repoScripts) ? repoScripts : thisDir;
+const externalDir = path.join(baseDir, 'external');
+
+function resolvePath(f) {
+	// If absolute or exists in current dir, use as-is
+	if (path.isAbsolute(f) || fs.existsSync(f)) return f;
+	// Check external/ first (turf, jszip), then scripts/ root (gtfs, bridgeBuilder, walk_route)
+	if (fs.existsSync(path.join(externalDir, f))) return path.join(externalDir, f);
+	if (fs.existsSync(path.join(baseDir, f))) return path.join(baseDir, f);
+	return f;
+}
+
+function read(f) {return fs.readFileSync(resolvePath(f)).toString();}
 function include(f, preamble='') {eval.apply(global, [preamble+' '+read(f)]);}
+
+// Resolve all.geojson: check CWD first (local map/ dir), then same dir as genDays.js
+let allGeoJsonPath = 'all.geojson';
+if (!fs.existsSync(allGeoJsonPath)) {
+	allGeoJsonPath = path.join(thisDir, 'all.geojson');
+}
 
 //var turf = require('turf');
 //import * as turf from 'turf'
@@ -31,7 +55,7 @@ console.log('gtfs:',walkSpeed, GTFS);
 include('walk_route.js');
 include('bridgeBuilder.js', "");
 
-var allGeoJson = fs.readFileSync('all.geojson');
+var allGeoJson = fs.readFileSync(allGeoJsonPath);
 var bridgeAndWaterGeojson = JSON.parse(allGeoJson);
 console.log('JSON parse ok');
 var bridges = calculateBridges(bridgeAndWaterGeojson);
