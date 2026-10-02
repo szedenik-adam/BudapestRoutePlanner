@@ -4,9 +4,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-LOCAL_MODE=false
+MODE="full"
 if [ "${1:-}" = "--local" ]; then
   LOCAL_MODE=true
+  MODE="local"
+elif [ "${1:-}" = "--generate-only" ]; then
+  MODE="generate"
+elif [ "${1:-}" = "--deploy-only" ]; then
+  MODE="deploy"
 fi
 
 # ─── Dependency checks & installs ───
@@ -25,7 +30,7 @@ fi
 echo "Node: $(node --version)"
 
 # wrangler CLI (only needed for deploy)
-if [ "$LOCAL_MODE" = false ]; then
+if [ "$MODE" != "generate" ]; then
   if ! npx wrangler --version &>/dev/null; then
     echo "wrangler not found. Installing…"
     npm install -g wrangler
@@ -49,7 +54,7 @@ fi
 
 # ─── Validate Cloudflare access ───
 
-if [ "$LOCAL_MODE" = false ]; then
+if [ "$MODE" != "generate" ]; then
   echo "Checking Cloudflare API access…"
   if ! npx wrangler whoami &>/dev/null 2>&1; then
     echo "ERROR: wrangler whoami failed. CLOUDFLARE_API_TOKEN is missing or invalid."
@@ -76,6 +81,19 @@ rm -rf budapest/timetable
 mv budapest/ziptimetable budapest/timetable
 
 # ─── Deploy ───
+
+if [ "$MODE" = "generate" ]; then
+  echo "Generate-only mode. Skipping deploy."
+  exit 0
+fi
+
+if [ "$MODE" = "deploy" ]; then
+  echo "Deploy-only mode. Skipping generation."
+  echo "Deploying to Cloudflare Pages…"
+  npx wrangler pages deploy budapest --project-name bprp --branch production
+  echo "Done."
+  exit 0
+fi
 
 if [ "$LOCAL_MODE" = true ]; then
   REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"

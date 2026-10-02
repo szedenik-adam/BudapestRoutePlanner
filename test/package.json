@@ -1,0 +1,9 @@
+{
+  "name": "brp-test",
+  "type": "module",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "selenium-webdriver": "^4.27.0"
+  }
+}

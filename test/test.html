@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html style="margin:0px;">
+<head>
+<title>BRP Test</title>
+<style>
+  #map { width: 100%; height: 100vh; }
+  #results { font-family: monospace; white-space: pre; position: fixed; bottom: 0; left: 0; right: 0; background: #000; color: #0f0; padding: 8px; font-size: 12px; max-height: 200px; overflow: auto; z-index: 9999; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="results"></div>
+
+<script>
+var testLog = [];
+function log(msg) {
+  testLog.push(msg);
+  document.getElementById('results').textContent = testLog.join('\n');
+  console.log('BRP-TEST:', msg);
+}
+
+function finish(ok, msg) {
+  log((ok ? 'PASS' : 'FAIL') + (msg ? ': ' + msg : ''));
+  document.title = ok ? 'PASS' : 'FAIL';
+}
+
+var TEST_TIMEOUT = 180000;
+var startTime = Date.now();
+
+function checkTimeout() {
+  if (Date.now() - startTime > TEST_TIMEOUT) {
+    finish(false, 'Timeout after ' + TEST_TIMEOUT + 'ms');
+  } else {
+    setTimeout(checkTimeout, 10000);
+  }
+}
+checkTimeout();
+
+// Override URLs before scripts load
+var timetable_url = '/budapest/timetable/';
+var gtfs_urls = [
+  '/budapest/budapest_gtfs.zipaa',
+  '/budapest/budapest_gtfs.zipab',
+  '/budapest/budapest_gtfs.zipac'
+];
+</script>
+
+<!-- Load the actual app scripts -->
+<script src='/scripts/maplibre-gl/maplibre-gl.js'></script>
+<link href='/scripts/maplibre-gl/maplibre-gl.css' rel='stylesheet' />
+<script src='/scripts/external/turf.min.js'></script>
+<script src='/scripts/gtfs.js'></script>
+<script src='/scripts/style.js'></script>
+<script src='/scripts/local.js'></script>
+<script src='/scripts/menuControl.js'></script>
+<script src='/scripts/workerPromises.js'></script>
+<script src='/scripts/route_ui.js'></script>
+<script src='/scripts/isochrone.js'></script>
+<script src='/scripts/stop_ui.js'></script>
+<script src='/scripts/external/protobuf.minimal.min.js'></script>
+<script src='/scripts/external/protobuf-gtfs-realcity.js'></script>
+<script src='/scripts/realtime.js'></script>
+<script src='/scripts/external/inflate_stream.min.js'></script>
+<script src='/scripts/destinations_ui.js'></script>
+<script src='/scripts/discordIntegration.js'></script>
+
+<script>
+// Override style tile URL for local serving
+if (style && style.sources && style.sources.openmaptiles) {
+  style.sources.openmaptiles.tiles = [window.location.origin + '/budapest/{z}/{x}/{y}.pbf'];
+}
+
+var map, mapUI, route, gtfsWorker;
+
+function onLoad() {
+  realtime = new Realtime();
+  map = new maplibregl.Map({
+    container: 'map',
+    style: style,
+    center: [19.06086, 47.52918],
+    zoom: 12
+  });
+  map.doubleClickZoom.disable();
+  map.touchZoomRotate.disableRotation();
+  mapUI = new MapUI(map);
+  mapUI.addMarkerOnClick();
+  map.addControl(new maplibregl.FullscreenControl({ container: document.querySelector('body') }));
+  map.addControl(new maplibregl.NavigationControl());
+  map.addControl(new maplibregl.GeolocateControl({
+    positionOptions: { enableHighAccuracy: true },
+    trackUserLocation: true,
+    showUserLocation: true
+  }));
+  stopDrawUI = new StopDrawUI(map);
+  realtimeUI = new RealtimeUI(mapUI);
+  map.addControl(new MenuControl(),'top-left');
+  map.addControl(new IsochroneControl(),'top-left');
+  map.addControl(new DestinationsControl(),'top-left');
+  route = new Route(mapUI);
+  progress = new ProgressBar();
+  gtfsWorker = new Worker('/scripts/gtfsWorker.js');
+  workerPromises = new WorkerPromises(gtfsWorker);
+  gtfsWorker.onmessage = function(e) {
+    if(typeof e.data !== 'object' || e.data === null) return;
+    if('route' in e.data) {
+      mapUI.routeReceived();
+      route.drawRoute(e.data.route.path);
+      showRoute(e.data.route.steps);
+      document.getElementById('routeInfoContainer').classList.remove('hidden');
+    }
+    if('progress' in e.data) {
+      progress.setTitle(e.data.progress[0]);
+      progress.setProgress(e.data.progress[1]);
+      if(e.data.progress[1] >= 1) progress.hide();
+      else if(!progress.isVisible()) progress.show();
+    }
+    workerPromises.checkMessageFromWorker(e.data);
+  };
+  log('App initialized');
+}
+</script>
+</body>
+</html>
