@@ -31,7 +31,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: timetable-generator/budapest
-          key: timetable-${{ runner.os }}-${{ hashFiles('timetable-generator/genDays.js', 'scripts/gtfs.js', 'scripts/walk_route.js', 'scripts/bridgeBuilder.js', 'scripts/external/turf.min.js', 'scripts/external/jszip.min.js', 'all.geojson') }}-${{ hashFiles('timetable-generator/budapest_static_map_files.zip') }}-${{ format('{0:yyyy}-{0:MM}-{0:DD}', now()) }}
+          key: timetable-${{ runner.os }}-${{ hashFiles('timetable-generator/genDays.js', 'scripts/gtfs.js', 'scripts/walk_route.js', 'scripts/bridgeBuilder.js', 'scripts/external/turf.min.js', 'scripts/external/jszip.min.js', 'all.geojson') }}-${{ hashFiles('timetable-generator/budapest_static_map_files.zip') }}-${{ github.run_number }}
           restore-keys: |
             timetable-${{ runner.os }}-${{ hashFiles('timetable-generator/genDays.js', 'scripts/gtfs.js', 'scripts/walk_route.js', 'scripts/bridgeBuilder.js', 'scripts/external/turf.min.js', 'scripts/external/jszip.min.js', 'all.geojson') }}-${{ hashFiles('timetable-generator/budapest_static_map_files.zip') }}-
 
