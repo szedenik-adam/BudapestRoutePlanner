@@ -26,9 +26,9 @@ if ! command -v wrangler &>/dev/null; then
 fi
 echo "wrangler: $(wrangler --version 2>/dev/null | head -1)"
 
-# Static map files — download from LFS zip if budapest/ is missing key dirs
+# Static map files — extract from LFS zip if budapest/ is missing key dirs
 if [ ! -d "budapest/0" ] || [ ! -d "budapest/1" ]; then
-  echo "Static map files missing. Downloading from LFS zip…"
+  echo "Static map files missing. Extracting from LFS zip…"
   if command -v git-lfs &>/dev/null; then
     git lfs install
     git lfs pull
@@ -68,6 +68,11 @@ rm -rf budapest/timetable
 mv budapest/ziptimetable budapest/timetable
 
 # ─── Deploy to Cloudflare Pages ───
+
+echo "Files to deploy:"
+find budapest -type f | sort
+echo "All files:"
+find . -type f | sort
 
 echo "Deploying to Cloudflare Pages…"
 npx wrangler pages deploy budapest --project-name bprp
