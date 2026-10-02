@@ -69,6 +69,6 @@ mv budapest/ziptimetable budapest/timetable
 # ─── Deploy to Cloudflare Pages ───
 
 echo "Deploying to Cloudflare Pages…"
-npx wrangler pages deploy budapest --project-name bprp --env production
+npx wrangler pages deploy budapest --project-name bprp --branch production
 
 echo "Done."
