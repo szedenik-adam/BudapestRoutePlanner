@@ -71,4 +71,5 @@ jobs:
         if: success() || github.event_name == 'schedule'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          REALTIME_API_KEY: ${{ secrets.REALTIME_API_KEY }}
         run: cd timetable-generator && ./update.sh --deploy-only

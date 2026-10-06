@@ -6,13 +6,20 @@ cd "$SCRIPT_DIR"
 
 MODE="full"
 if [ "${1:-}" = "--local" ]; then
-  LOCAL_MODE=true
   MODE="local"
 elif [ "${1:-}" = "--generate-only" ]; then
   MODE="generate"
 elif [ "${1:-}" = "--deploy-only" ]; then
   MODE="deploy"
 fi
+
+write_realtime_api_key() {
+  if [ ! -d "budapest" ]; then
+    echo "ERROR: budapest/ does not exist; generate or restore the timetable before preparing deployment."
+    exit 1
+  fi
+  printf '%s' "${REALTIME_API_KEY:-dummy}" > budapest/realtime.txt
+}
 
 # ─── Dependency checks & installs ───
 
@@ -66,19 +73,21 @@ fi
 
 # ─── Generate timetables ───
 
-echo "Downloading GTFS data…"
-wget -q --show-progress -O budapest_gtfs.zip https://bkk.hu/gtfs/budapest_gtfs.zip
+if [ "$MODE" != "deploy" ]; then
+  echo "Downloading GTFS data…"
+  wget -q --show-progress -O budapest_gtfs.zip https://bkk.hu/gtfs/budapest_gtfs.zip
 
-echo "Generating timetable for the next 7 days…"
-node --max-old-space-size=8100 genDays.js --days=7
+  echo "Generating timetable for the next 7 days…"
+  node --max-old-space-size=8100 genDays.js --days=7
 
-echo "Zipping timetable files…"
-mkdir -p budapest/ziptimetable
-cd budapest/timetable
-find . -type f -exec zip --compression-method deflate -9 -D '../ziptimetable/{}.zip' '{}' \;
-cd "$SCRIPT_DIR"
-rm -rf budapest/timetable
-mv budapest/ziptimetable budapest/timetable
+  echo "Zipping timetable files…"
+  mkdir -p budapest/ziptimetable
+  cd budapest/timetable
+  find . -type f -exec zip --compression-method deflate -9 -D '../ziptimetable/{}.zip' '{}' \;
+  cd "$SCRIPT_DIR"
+  rm -rf budapest/timetable
+  mv budapest/ziptimetable budapest/timetable
+fi
 
 # ─── Deploy ───
 
@@ -90,12 +99,13 @@ fi
 if [ "$MODE" = "deploy" ]; then
   echo "Deploy-only mode. Skipping generation."
   echo "Deploying to Cloudflare Pages…"
+  write_realtime_api_key
   npx wrangler pages deploy budapest --project-name bprp --branch production --commit-dirty=true
   echo "Done."
   exit 0
 fi
 
-if [ "$LOCAL_MODE" = true ]; then
+if [ "$MODE" = "local" ]; then
   REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
   echo "Local mode: copying generated files to repo for local serving…"
 
@@ -139,6 +149,7 @@ LOCALJS
   echo "Then open http://localhost:8080/index.html"
 else
   echo "Deploying to Cloudflare Pages…"
+  write_realtime_api_key
   npx wrangler pages deploy budapest --project-name bprp --branch production --commit-dirty=true
 fi
 
