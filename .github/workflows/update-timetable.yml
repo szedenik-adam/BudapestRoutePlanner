@@ -45,8 +45,7 @@ jobs:
         run: |
           sudo apt-get install -y xvfb
           # Install geckodriver
-          GD_VERSION=$(curl -s https://api.github.com/repos/mozilla/geckodriver/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
-          curl -sL "https://github.com/mozilla/geckodriver/releases/download/${GD_VERSION}/geckodriver-${GD_VERSION}-linux64.tar.gz" | sudo tar xz -C /usr/local/bin
+          curl -sL "https://github.com/mozilla/geckodriver/releases/download/v0.37.1/geckodriver-${GD_VERSION}-linux64.tar.gz" | sudo tar xz -C /usr/local/bin
           xvfb-run --auto-servernum --server-args="-screen 0 1280x800x24" bash ./test/run-ci.sh
 
       - name: Save test screenshot

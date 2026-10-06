@@ -1,0 +1,19 @@
+[Unit]
+Description=Budapest Route Planner GTFS-RT recorder
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/lib/budapest-route-planner
+EnvironmentFile=%h/.config/budapest-route-planner/realtime-poller.env
+Environment=REALTIME_DATA_DIR=%h/.local/share/budapest-route-planner/realtime
+ExecStart=/usr/bin/node %h/.local/lib/budapest-route-planner/realtime-poller.mjs
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target
