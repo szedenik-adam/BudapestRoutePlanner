@@ -312,6 +312,7 @@ export async function ensureTimetablesForDate({
   await migrateCommonFilenames(timetableDirectory);
 
   let daySource = await readStoredDay(timetableDirectory, dayNumber, date);
+  const needsNewTimetable = !daySource;
   if (!daySource) {
     daySource = await findValidFile(
       localDirectories,
@@ -325,28 +326,32 @@ export async function ensureTimetablesForDate({
         fetchImpl
       );
     }
+  }
+
+  let commonPath = null;
+  if (needsNewTimetable) {
+    const localCommon = await findValidFile(
+      localDirectories,
+      ['common.json.zip', 'common.json'],
+      'common.json'
+    );
+    if (localCommon) {
+      await saveCommonIfChanged(localCommon, date, timetableDirectory);
+    }
+
+    const remoteCommon = await fetchSource(
+      new URL('common.json.zip', remoteBaseUrl),
+      'common.json.zip',
+      fetchImpl
+    );
+    commonPath = await saveCommonIfChanged(remoteCommon, date, timetableDirectory);
+
     const extension = daySource.isZip ? '.json.zip' : '.json';
     const dayName = `${date}-${dayNumber}${extension}`;
     const dayPath = path.join(timetableDirectory, dayName);
     await writeAtomic(dayPath, daySource.data);
     daySource = { ...daySource, name: dayName };
   }
-
-  const localCommon = await findValidFile(
-    localDirectories,
-    ['common.json.zip', 'common.json'],
-    'common.json'
-  );
-  if (localCommon) {
-    await saveCommonIfChanged(localCommon, date, timetableDirectory);
-  }
-
-  const remoteCommon = await fetchSource(
-    new URL('common.json.zip', remoteBaseUrl),
-    'common.json.zip',
-    fetchImpl
-  );
-  const commonPath = await saveCommonIfChanged(remoteCommon, date, timetableDirectory);
 
   return {
     date,

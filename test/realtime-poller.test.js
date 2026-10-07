@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { gunzipSync } from 'node:zlib';
-import { mkdtemp, readFile, readdir, rm, unlink, writeFile } from 'node:fs/promises';
+import { deflateRawSync, gunzipSync } from 'node:zlib';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -11,6 +11,7 @@ import {
   pollOnce,
   pruneOldRecords
 } from '../realtime-recorder/realtime-poller.mjs';
+import { ensureTimetablesForDate } from '../realtime-recorder/timetable-sync-worker.mjs';
 
 async function createOutputDirectory(t) {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'bprp-realtime-poller-'));
@@ -19,7 +20,18 @@ async function createOutputDirectory(t) {
 }
 
 async function readArchiveEntries(archivePath) {
-  const tar = gunzipSync(await readFile(archivePath));
+  let archiveData;
+  let sourcePath = archivePath;
+  try {
+    archiveData = await readFile(sourcePath);
+  } catch (error) {
+    if (error.code !== 'ENOENT' || !archivePath.endsWith('.tar.gz')) throw error;
+    sourcePath = archivePath.slice(0, -3);
+    archiveData = await readFile(sourcePath);
+  }
+  const tar = archiveData[0] === 0x1f && archiveData[1] === 0x8b
+    ? gunzipSync(archiveData)
+    : archiveData;
   const entries = [];
   let offset = 0;
 
@@ -34,6 +46,51 @@ async function readArchiveEntries(archivePath) {
   }
 
   return entries;
+}
+
+function crc32(data) {
+  let crc = 0xffffffff;
+  for (const byte of data) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) {
+      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function createZipFile(name, content) {
+  const filename = Buffer.from(name);
+  const body = Buffer.from(content);
+  const compressed = deflateRawSync(body);
+  const checksum = crc32(body);
+  const localHeader = Buffer.alloc(30);
+  localHeader.writeUInt32LE(0x04034b50, 0);
+  localHeader.writeUInt16LE(20, 4);
+  localHeader.writeUInt16LE(8, 8);
+  localHeader.writeUInt32LE(checksum, 14);
+  localHeader.writeUInt32LE(compressed.length, 18);
+  localHeader.writeUInt32LE(body.length, 22);
+  localHeader.writeUInt16LE(filename.length, 26);
+
+  const centralHeader = Buffer.alloc(46);
+  centralHeader.writeUInt32LE(0x02014b50, 0);
+  centralHeader.writeUInt16LE(20, 4);
+  centralHeader.writeUInt16LE(20, 6);
+  centralHeader.writeUInt16LE(8, 10);
+  centralHeader.writeUInt32LE(checksum, 16);
+  centralHeader.writeUInt32LE(compressed.length, 20);
+  centralHeader.writeUInt32LE(body.length, 24);
+  centralHeader.writeUInt16LE(filename.length, 28);
+  const centralDirectory = Buffer.concat([centralHeader, filename]);
+  const endRecord = Buffer.alloc(22);
+  endRecord.writeUInt32LE(0x06054b50, 0);
+  endRecord.writeUInt16LE(1, 8);
+  endRecord.writeUInt16LE(1, 10);
+  endRecord.writeUInt32LE(centralDirectory.length, 12);
+  endRecord.writeUInt32LE(localHeader.length + filename.length + compressed.length, 16);
+
+  return Buffer.concat([localHeader, filename, compressed, centralDirectory, endRecord]);
 }
 
 test('writes changed response bytes as timestamp-named tar entries', async (t) => {
@@ -52,6 +109,7 @@ test('writes changed response bytes as timestamp-named tar entries', async (t) =
 
   assert.equal(saved.changed, true);
   assert.equal(path.basename(saved.outputFile), '2026-10-06T10.tar.gz');
+  assert.ok((await readdir(outputDirectory)).includes('2026-10-06T10.tar'));
   const entries = await readArchiveEntries(saved.outputFile);
   assert.equal(entries.length, 1);
   assert.equal(entries[0].name, '2026-10-06T10-00-00.000Z.pb');
@@ -183,12 +241,11 @@ test('discards an incomplete tar entry when resuming an archive', async (t) => {
 
   const archivePath = first.outputFile;
   const tarPath = archivePath.slice(0, -3);
-  const tarContents = gunzipSync(await readFile(archivePath));
+  const tarContents = await readFile(tarPath);
   await writeFile(tarPath, Buffer.concat([
     tarContents.subarray(0, tarContents.length - 1024),
     Buffer.alloc(200, 0x41)
   ]));
-  await unlink(archivePath);
 
   const secondWriter = new HourlyArchiveWriter(outputDirectory);
   const second = await appendChangedResponse({
@@ -216,4 +273,78 @@ test('retains the current 30 UTC days and prunes older archives', async (t) => {
 
   assert.equal(removed, 1);
   assert.deepEqual(remaining, ['2026-09-07T11.tar', 'notes.txt']);
+});
+
+test('checks common timetable only when acquiring a missing day timetable', async (t) => {
+  const outputDirectory = await createOutputDirectory(t);
+  const localDirectory = path.join(outputDirectory, 'generated');
+  await mkdir(localDirectory);
+  const date = '2026-10-06';
+  const dayNumber = Math.round(
+    (Date.parse(`${date}T00:00:00.000Z`) - Date.UTC(2000, 0, 1)) / 86_400_000
+  );
+  await writeFile(path.join(localDirectory, `${dayNumber}.json`), '{"day":1}');
+  const commonV1 = createZipFile('common.json', '{"version":1}');
+  const commonV2 = createZipFile('common.json', '{"version":2}');
+  await writeFile(path.join(localDirectory, 'common.json.zip'), commonV1);
+  let remoteCommon = commonV1;
+  let requests = 0;
+  const fetchImpl = async () => {
+    requests++;
+    return new Response(remoteCommon);
+  };
+  const options = {
+    date,
+    outputDirectory,
+    localDirectories: [localDirectory],
+    remoteBaseUrl: 'https://example.test/timetable/',
+    fetchImpl
+  };
+
+  await ensureTimetablesForDate(options);
+  remoteCommon = commonV2;
+  await writeFile(path.join(localDirectory, 'common.json.zip'), commonV2);
+  const nextHour = await ensureTimetablesForDate(options);
+  const files = (await readdir(outputDirectory)).sort();
+
+  assert.equal(requests, 1);
+  assert.equal(nextHour.commonPath, null);
+  assert.deepEqual(files.filter((name) => name.includes('-common')), [
+    '2026-10-06-common.json.zip'
+  ]);
+});
+
+test('retries common timetable retrieval if it failed before storing the day timetable', async (t) => {
+  const outputDirectory = await createOutputDirectory(t);
+  const date = '2026-10-06';
+  const dayNumber = Math.round(
+    (Date.parse(`${date}T00:00:00.000Z`) - Date.UTC(2000, 0, 1)) / 86_400_000
+  );
+  const dayZip = createZipFile(`${dayNumber}.json`, '{"day":1}');
+  const commonZip = createZipFile('common.json', '{"version":1}');
+  let commonRequests = 0;
+  const fetchImpl = async (url) => {
+    if (new URL(url).pathname.endsWith('common.json.zip')) {
+      commonRequests++;
+      if (commonRequests === 1) return new Response('failed', { status: 500 });
+      return new Response(commonZip);
+    }
+    return new Response(dayZip);
+  };
+  const options = {
+    date,
+    outputDirectory,
+    localDirectories: [],
+    remoteBaseUrl: 'https://example.test/timetable/',
+    fetchImpl
+  };
+
+  await assert.rejects(ensureTimetablesForDate(options), /HTTP 500/);
+  const afterFailure = await readdir(outputDirectory);
+  assert.ok(!afterFailure.includes(`${date}-${dayNumber}.json.zip`));
+
+  const result = await ensureTimetablesForDate(options);
+  assert.equal(commonRequests, 2);
+  assert.equal(path.basename(result.dayPath), `${date}-${dayNumber}.json.zip`);
+  assert.equal(path.basename(result.commonPath), `${date}-common.json.zip`);
 });
