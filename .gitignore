@@ -10,6 +10,7 @@
 /budapest_gtfs.zip
 /budapest.zip
 /scripts/local.js
+/realtime-oversampler/output/
 style*json*
 /.vs
 /fonts
