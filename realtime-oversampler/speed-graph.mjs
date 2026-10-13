@@ -1447,6 +1447,78 @@ export class SpeedGraphBuilder {
       });
     }
 
+    let earlierCorrection = null;
+    const previousPendingIndex = pendingSamples.findIndex(
+      (entry) => entry.sample === previous
+    );
+    const earlier = previousPendingIndex > 0
+      ? pendingSamples[previousPendingIndex - 1].sample
+      : null;
+    const earlierTimeDeltaSeconds =
+      earlier?.vehicleTimestamp !== null &&
+      earlier?.vehicleTimestamp !== undefined &&
+      sample.vehicleTimestamp !== null
+        ? sample.vehicleTimestamp - earlier.vehicleTimestamp
+        : null;
+    if (earlier &&
+        earlier.tripId === sample.tripId &&
+        earlier.trip === sample.trip &&
+        earlier.stopIndex === sample.stopIndex &&
+        earlier.stopId === sample.stopId &&
+        earlier.stopShapeDistance === sample.stopShapeDistance &&
+        earlier.feedReportedStopDistance ===
+          previous.feedReportedStopDistance &&
+        earlier.reportedStopDistance === earlier.feedReportedStopDistance &&
+        previous.reportedStopDistance === previous.feedReportedStopDistance &&
+        !earlier.doorOpen &&
+        earlierTimeDeltaSeconds > 0 &&
+        earlierTimeDeltaSeconds < shortIntervalStopDistanceCorrectionSeconds &&
+        !earlier.nextStopDistanceCorrectionApplied &&
+        !earlier.stopDistanceCorrectionApplied &&
+        earlier.position) {
+      const earlierProjection = projectPositionOnShape(
+        sample.trip,
+        earlier.position,
+        {
+          minShapeDistance: shapeStartDistance,
+          maxShapeDistance: shapeEndDistance
+        }
+      );
+      if (earlierProjection &&
+          earlierProjection.crossTrackMeters <=
+            stopDistanceShapeProjectionToleranceMeters &&
+          earlierProjection.shapeDistance <= previousProjection.shapeDistance &&
+          previousProjection.shapeDistance <= currentProjection.shapeDistance) {
+        const earlierExpectedStopDistance =
+          (shapeEndDistance - earlierProjection.shapeDistance) *
+          metersPerUnit;
+        const earlierShapeError = Math.abs(
+          earlier.reportedStopDistance - earlierExpectedStopDistance
+        );
+        const correctedEarlierStopDistance =
+          sample.reportedStopDistance +
+          (currentProjection.shapeDistance - earlierProjection.shapeDistance) *
+            metersPerUnit;
+        if (earlierShapeError >= staleStopDistanceShapeErrorMeters &&
+            earlierShapeError - currentShapeError >=
+              minimumStopDistanceShapeErrorImprovementMeters &&
+            correctedEarlierStopDistance >= 0 &&
+            Math.abs(
+              correctedEarlierStopDistance - earlierExpectedStopDistance
+            ) <= stopDistanceShapeProjectionToleranceMeters) {
+          earlierCorrection = {
+            sample: earlier,
+            reportedStopDistance: earlier.reportedStopDistance,
+            correctedStopDistance: correctedEarlierStopDistance,
+            expectedStopDistance: earlierExpectedStopDistance,
+            shapeError: earlierShapeError,
+            crossTrackMeters: earlierProjection.crossTrackMeters
+          };
+          setReportedStopDistance(earlier, correctedEarlierStopDistance);
+        }
+      }
+    }
+
     const reportedStopDistance = previous.reportedStopDistance;
     setReportedStopDistance(previous, correctedPreviousStopDistance);
     this.recalculatePendingGpsDriftScores(state);
@@ -1465,7 +1537,8 @@ export class SpeedGraphBuilder {
       previousShapeError,
       currentShapeError,
       previousCrossTrackMeters: previousProjection.crossTrackMeters,
-      currentCrossTrackMeters: currentProjection.crossTrackMeters
+      currentCrossTrackMeters: currentProjection.crossTrackMeters,
+      earlierCorrection
     });
     return sample;
   }

@@ -466,6 +466,59 @@ test('reconciles a stale previous stop_distance from a shape-consistent short-in
   assert.ok(corrections[0].currentShapeError <= 20);
 });
 
+test('also reconciles one earlier feed in the same repeated stale-distance run', () => {
+  const corrections = [];
+  const builder = createBuilder({
+    onShortIntervalStopDistanceCorrection: (incident) =>
+      corrections.push(incident)
+  });
+  const timetable = createTimetable();
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 990,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 300,
+    position: { latitude: 0, longitude: 0.0002 }
+  })), timetable);
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1000,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 250,
+    position: { latitude: 0, longitude: 0.0004 }
+  })), timetable);
+  const earlier = builder.vehicleStates.get('vehicle').lastFeedSample;
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1001,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 250,
+    position: { latitude: 0, longitude: 0.0005 }
+  })), timetable);
+  const previous = builder.vehicleStates.get('vehicle').lastFeedSample;
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1002,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 56,
+    position: { latitude: 0, longitude: 0.0006 }
+  })), timetable);
+
+  assert.equal(corrections.length, 1);
+  const { earlierCorrection } = corrections[0];
+  assert.equal(earlierCorrection.sample, earlier);
+  assert.equal(earlierCorrection.reportedStopDistance, 250);
+  assert.ok(earlierCorrection.correctedStopDistance > 75);
+  assert.ok(earlierCorrection.correctedStopDistance < 80);
+  assert.equal(earlier.reportedStopDistance, earlierCorrection.correctedStopDistance);
+  assert.equal(earlier.stopDistanceCorrectionRawValue, 250);
+  assert.equal(previous.reportedStopDistance, corrections[0].correctedStopDistance);
+  assert.equal(
+    earlier.progress,
+    earlier.stopShapeDistance - earlier.reportedStopDistance
+  );
+});
+
 test('reconciles at four seconds but not at the exclusive 4.5-second boundary or without evidence', () => {
   for (const {
     timestampDelta,

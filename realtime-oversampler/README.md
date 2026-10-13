@@ -71,7 +71,7 @@ Before graph calculations, the builder stages up to (**12**) feeds per vehicle i
 
 ### 5. Short-Interval `stop_distance` Recalculation (`speed-graph.mjs`)
 * Due to the feed provider sometimes delaying the calculation of the `stop_distance`, we may experience a sudden, extreme drop over a short time window (< 4.5 seconds), implying an impossible speed spike (> 35 m/s). This happens because the previous sample reported a stale, heavily inflated distance that abruptly corrected itself.
-* Handled by `correctShortIntervalStopDistance`, which recalculates the previous sample's reported stop distance of a rapid closed-door pairs using shape projections.
+* Handled by `correctShortIntervalStopDistance`, which recalculates the previous sample's reported stop distance of a rapid closed-door pair using shape projections. If the immediately preceding feed repeats the same stale distance, its `stop_distance` is also recalculated (rechecking earlier feeds is needed because the error correction is triggered by sudden `stop_distance` change which might not be present in the previous feed).
 * Logged as "Short-interval stop_distance reconciled".
 
 ### 6. Early Zero `stop_distance` Correction (`speed-graph.mjs`)

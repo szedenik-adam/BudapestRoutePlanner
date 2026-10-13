@@ -399,6 +399,20 @@ function formatGpsBasedNextStopZeroCorrection(incident) {
 }
 
 function formatShortIntervalStopDistanceCorrection(incident) {
+  const earlierCorrection = incident.earlierCorrection
+    ? `\n  Earlier repeated feed: ` +
+      `${formatFeedSource(incident.earlierCorrection.sample.source)}; ` +
+      `vehicle time ` +
+      `${formatTimestamp(incident.earlierCorrection.sample.vehicleTimestamp)}; ` +
+      `GPS ${formatGpsPosition(incident.earlierCorrection.sample.position)}; ` +
+      `stop_distance ` +
+      `${incident.earlierCorrection.reportedStopDistance.toFixed(1)} -> ` +
+      `${incident.earlierCorrection.correctedStopDistance.toFixed(1)} m ` +
+      `(shape estimate ` +
+      `${incident.earlierCorrection.expectedStopDistance.toFixed(1)} m, ` +
+      `prior error ${incident.earlierCorrection.shapeError.toFixed(1)} m, ` +
+      `${incident.earlierCorrection.crossTrackMeters.toFixed(1)} m from shape)`
+    : '';
   return (
     `Short-interval stop_distance reconciled: vehicle id=${incident.vehicleId || '<missing>'}, ` +
     `name=${incident.vehicleName || '<missing>'}` +
@@ -419,7 +433,8 @@ function formatShortIntervalStopDistanceCorrection(incident) {
     `(shape estimate ${incident.currentExpectedStopDistance.toFixed(1)} m, ` +
     `error ${incident.currentShapeError.toFixed(1)} m, ` +
     `${incident.currentCrossTrackMeters.toFixed(1)} m from shape); ` +
-    `vehicle time delta ${incident.vehicleTimeDeltaSeconds} s`
+    `vehicle time delta ${incident.vehicleTimeDeltaSeconds} s` +
+    earlierCorrection
   );
 }
 
