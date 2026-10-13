@@ -199,6 +199,229 @@ test('recalculates stop_distance on a closed-door next-stop change and its quick
   assert.equal(state.lastFeedSample.nextStopDistanceCorrectionApplied, true);
 });
 
+test('corrects and carries a GPS-derived zero stop_distance after a next-stop change', () => {
+  const corrections = [];
+  const builder = createBuilder({
+    onGpsBasedNextStopZeroCorrection: (incident) => corrections.push(incident)
+  });
+  const timetable = createTimetable({
+    stopShapeDist: [0, 100, 50000],
+    shapePoints: [
+      [0, 0, 0],
+      [100, 0.001, 0],
+      [50000, 0.002, 0],
+      [50050, 0.003, 0]
+    ]
+  });
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1000,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 80,
+    position: { latitude: 0, longitude: 0.001 }
+  })), timetable);
+  const previousProgress =
+    builder.vehicleStates.get('vehicle').lastFeedSample.progress;
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1005,
+    sequence: 3,
+    stopId: 'C',
+    stopDistance: 0,
+    position: { latitude: 0, longitude: 0.0011 }
+  })), timetable);
+
+  let state = builder.vehicleStates.get('vehicle');
+  assert.equal(timetable.trips[0].shapeDistanceLegValid[1], false);
+  assert.equal(state.lastFeedSample.feedReportedStopDistance, 0);
+  assert.ok(state.lastFeedSample.reportedStopDistance > 49950);
+  assert.ok(state.lastFeedSample.reportedStopDistance < 50000);
+  assert.ok(state.lastFeedSample.progress > previousProgress);
+  assert.ok(state.lastFeedSample.progress < previousProgress + 20);
+  assert.equal(state.gpsBasedZeroStopDistanceCorrection.stopId, 'C');
+  assert.equal(corrections[0].trigger, 'next-stop-change');
+  assert.equal(corrections[0].shapeLegsValid, false);
+  assert.ok(corrections[0].physicalStopDistance > 95);
+  assert.ok(corrections[0].physicalStopDistance < 105);
+  assert.ok(corrections[0].chainageOffset > 49800);
+  assert.ok(Math.abs(
+    state.lastFeedSample.progress -
+      previousProgress - corrections[0].geometryMovementMeters
+  ) < 0.01);
+  builder.flushPendingStationaryFeeds();
+  state = builder.vehicleStates.get('vehicle');
+  assert.equal(state.recentSpeedTransitions.length, 1);
+  assert.ok(Math.abs(
+    state.recentSpeedTransitions[0].speedMps -
+      corrections[0].geometryMovementMeters / 5
+  ) < 0.01);
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1010,
+    sequence: 3,
+    stopId: 'C',
+    stopDistance: 0,
+    position: { latitude: 0, longitude: 0.0013 }
+  })), timetable);
+
+  state = builder.vehicleStates.get('vehicle');
+  assert.equal(state.lastFeedSample.feedReportedStopDistance, 0);
+  assert.ok(state.lastFeedSample.reportedStopDistance > 49930);
+  assert.ok(state.lastFeedSample.reportedStopDistance < 49960);
+  assert.equal(corrections[1].trigger, 'continued-zero');
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1015,
+    sequence: 3,
+    stopId: 'C',
+    stopDistance: 0,
+    position: { latitude: 0, longitude: 0.0019 }
+  })), timetable);
+
+  state = builder.vehicleStates.get('vehicle');
+  assert.equal(state.lastFeedSample.feedReportedStopDistance, 0);
+  assert.ok(state.lastFeedSample.reportedStopDistance > 49800);
+  assert.ok(state.lastFeedSample.reportedStopDistance < 49900);
+  assert.ok(state.lastFeedSample.progress > 100);
+  assert.equal(state.gpsBasedZeroStopDistanceCorrection.stopId, 'C');
+  assert.equal(corrections[2].trigger, 'continued-zero');
+  assert.ok(corrections[2].physicalStopDistance < 50);
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1020,
+    sequence: 3,
+    stopId: 'C',
+    stopDistance: 0,
+    position: { latitude: 0, longitude: 0.0021 }
+  })), timetable);
+
+  state = builder.vehicleStates.get('vehicle');
+  assert.equal(state.lastFeedSample.feedReportedStopDistance, 0);
+  assert.ok(state.lastFeedSample.reportedStopDistance > 49800);
+  assert.ok(state.lastFeedSample.reportedStopDistance < 50000);
+  assert.equal(state.gpsBasedZeroStopDistanceCorrection.stopId, 'C');
+  assert.equal(corrections[3].trigger, 'continued-zero');
+  assert.ok(corrections[3].physicalStopDistance < 0);
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1025,
+    sequence: 3,
+    stopId: 'C',
+    stopDistance: 70,
+    position: { latitude: 0, longitude: 0.0022 }
+  })), timetable);
+
+  state = builder.vehicleStates.get('vehicle');
+  assert.equal(state.lastFeedSample.reportedStopDistance, 70);
+  assert.equal(state.gpsBasedZeroStopDistanceCorrection, null);
+  assert.equal(corrections.length, 4);
+});
+
+test('leaves a next-stop zero unchanged when GPS is already near the stop', () => {
+  const corrections = [];
+  const builder = createBuilder({
+    onGpsBasedNextStopZeroCorrection: (incident) => corrections.push(incident)
+  });
+  const timetable = createTimetable({
+    stopShapeDist: [0, 100, 50000],
+    shapePoints: [
+      [0, 0, 0],
+      [100, 0.001, 0],
+      [50000, 0.002, 0]
+    ]
+  });
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1000,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 80,
+    position: { latitude: 0, longitude: 0.001 }
+  })), timetable);
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1005,
+    sequence: 3,
+    stopId: 'C',
+    stopDistance: 0,
+    position: { latitude: 0, longitude: 0.0019 }
+  })), timetable);
+
+  const state = builder.vehicleStates.get('vehicle');
+  assert.equal(state.lastFeedSample.reportedStopDistance, 0);
+  assert.equal(state.gpsBasedZeroStopDistanceCorrection, null);
+  assert.equal(corrections.length, 0);
+});
+
+test('rejects a zero feed when an active GPS correction cannot project it', () => {
+  const dispositions = [];
+  const corrections = [];
+  const builder = createBuilder({
+    onFeedDisposition: (disposition) => dispositions.push(disposition),
+    onGpsBasedNextStopZeroCorrection: (incident) =>
+      corrections.push(incident)
+  });
+  const timetable = createTimetable({
+    stopShapeDist: [0, 100, 50000],
+    shapePoints: [
+      [0, 0, 0],
+      [100, 0.001, 0],
+      [50000, 0.002, 0]
+    ]
+  });
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1000,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 80,
+    position: { latitude: 0, longitude: 0.001 }
+  })), timetable);
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1005,
+    sequence: 3,
+    stopId: 'C',
+    stopDistance: 0,
+    position: { latitude: 0, longitude: 0.0011 }
+  })), timetable);
+
+  const state = builder.vehicleStates.get('vehicle');
+  const retainedSample = state.lastFeedSample;
+  assert.equal(state.gpsBasedZeroStopDistanceCorrection.stopId, 'C');
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1010,
+    sequence: 3,
+    stopId: 'C',
+    stopDistance: 0,
+    position: { latitude: 0.0003, longitude: 0.0012 }
+  })), timetable);
+
+  assert.equal(state.lastFeedSample, retainedSample);
+  assert.equal(state.gpsBasedZeroStopDistanceCorrection.stopId, 'C');
+  assert.equal(dispositions.length, 1);
+  assert.equal(
+    dispositions[0].reason,
+    'gps-based-next-stop-correction-failed'
+  );
+  assert.equal(dispositions[0].sample.vehicleTimestamp, 1010);
+  assert.equal(dispositions[0].previous, retainedSample);
+  assert.equal(builder.rejectedSamples, 1);
+  assert.equal(builder.rejectedVehicleObservations, 1);
+  assert.equal(builder.rejectedFeedPairs, 1);
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1015,
+    sequence: 3,
+    stopId: 'C',
+    stopDistance: 0,
+    position: { latitude: 0, longitude: 0.0015 }
+  })), timetable);
+
+  assert.equal(state.lastFeedSample.vehicleTimestamp, 1015);
+  assert.equal(corrections.at(-1).trigger, 'continued-zero');
+  assert.equal(dispositions.length, 1);
+});
+
 test('reconciles a stale previous stop_distance from a shape-consistent short-interval update', () => {
   const corrections = [];
   const builder = createBuilder({
@@ -440,9 +663,11 @@ test('corrects a closed-door near-stop zero snap using matching GPS movement', (
 test('reuses a stop-distance correction for an identical same-timestamp feed', () => {
   const incidents = [];
   const outliers = [];
+  const feedDispositions = [];
   const builder = createBuilder({
     onClosedDoorStopDistanceCorrection: (incident) => incidents.push(incident),
-    onSpeedOutlier: (incident) => outliers.push(incident)
+    onSpeedOutlier: (incident) => outliers.push(incident),
+    onFeedDisposition: (disposition) => feedDispositions.push(disposition)
   });
   const timetable = createTimetable();
   const previous = vehicleEntity({
@@ -473,6 +698,10 @@ test('reuses a stop-distance correction for an identical same-timestamp feed', (
     incidents[0].correctedStopDistance
   );
   assert.equal(outliers.length, 0);
+  assert.ok(feedDispositions.some((disposition) =>
+    disposition.kind === 'pair-rejected' &&
+    disposition.reason === 'non-positive-elapsed-time'
+  ));
   assert.ok(Math.abs(state.recentSpeedTransitions[0].speedMps - 13.9) < 0.2);
 });
 
@@ -860,8 +1089,10 @@ test('corrects a near-stop door-open zero that causes a progress-speed spike', (
 
 test('quarantines backward stop sequences until GPS validates stop_distance', () => {
   const incidents = [];
+  const feedDispositions = [];
   const builder = createBuilder({
-    onStopSequenceRegression: (incident) => incidents.push(incident)
+    onStopSequenceRegression: (incident) => incidents.push(incident),
+    onFeedDisposition: (disposition) => feedDispositions.push(disposition)
   });
   const stopCoordinates = [
     [19, 47.5],
@@ -911,6 +1142,12 @@ test('quarantines backward stop sequences until GPS validates stop_distance', ()
   assert.equal(state.lastSample.timestamp, 1000);
   assert.equal(state.stopSequenceRegression.invalidatedFeedCount, 2);
   assert.equal(builder.summary().stopSequenceRegressionRejectedFeeds, 2);
+  assert.equal(
+    feedDispositions.filter((disposition) =>
+      disposition.reason === 'stop-sequence-regression'
+    ).length,
+    2
+  );
 
   builder.processFeed(feed(vehicleEntity({
     timestamp: 1040,
@@ -1263,8 +1500,10 @@ test('uses the specified fast, normal, slow, and very-slow thresholds', () => {
 
 test('rejects high-drift feeds and rechecks buffered preceding feeds', () => {
   const rejections = [];
+  const feedDispositions = [];
   const builder = createBuilder({
-    onGpsDriftRejection: (rejection) => rejections.push(rejection)
+    onGpsDriftRejection: (rejection) => rejections.push(rejection),
+    onFeedDisposition: (disposition) => feedDispositions.push(disposition)
   });
   const timetable = createTimetable();
   const commonSample = {
@@ -1297,6 +1536,10 @@ test('rejects high-drift feeds and rechecks buffered preceding feeds', () => {
   assert.equal(builder.vehicleStates.get('vehicle').lastSample.timestamp, 1000);
   assert.equal(builder.summary().gpsDriftRejectedFeeds, 2);
   assert.equal(builder.summary().rejectedVehicleObservations, 2);
+  assert.deepEqual(
+    feedDispositions.map(({ reason }) => reason),
+    ['gps-drift', 'gps-drift']
+  );
 });
 
 test('back-propagates rejection using stop-distance-based progress reversals', () => {
@@ -1382,6 +1625,54 @@ test('scores repeated timestamp and GPS-position feeds from the prior distinct f
   assert.ok(repeatedFeedRejection.score > 100);
   assert.ok(repeatedFeedRejection.speedMps > 25);
   assert.equal(builder.vehicleStates.get('vehicle').lastSample.timestamp, 1001);
+});
+
+test('ignores backward-timestamp feeds without replacing the correction baseline', () => {
+  const feedDispositions = [];
+  const builder = createBuilder({
+    onFeedDisposition: (disposition) => feedDispositions.push(disposition)
+  });
+  const timetable = createTimetable();
+  const commonSample = {
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 50,
+    position: { latitude: 47.5, longitude: 19 }
+  };
+
+  builder.processFeed(feed(vehicleEntity({
+    ...commonSample,
+    timestamp: 1000
+  })), timetable);
+  builder.processFeed(feed(vehicleEntity({
+    ...commonSample,
+    timestamp: 1010
+  })), timetable);
+  builder.processFeed(feed(vehicleEntity({
+    ...commonSample,
+    timestamp: 1005,
+    stopDistance: 0
+  })), timetable);
+
+  const state = builder.vehicleStates.get('vehicle');
+  assert.equal(state.lastFeedSample.timestamp, 1010);
+  assert.equal(state.lastFeedSample.reportedStopDistance, 50);
+  assert.equal(feedDispositions.length, 1);
+  assert.equal(feedDispositions[0].reason, 'timestamp-regression');
+  assert.equal(feedDispositions[0].sample.timestamp, 1005);
+  assert.equal(feedDispositions[0].previous.timestamp, 1010);
+
+  builder.processFeed(feed(vehicleEntity({
+    ...commonSample,
+    timestamp: 1015
+  })), timetable);
+
+  assert.equal(state.lastFeedSample.timestamp, 1015);
+  const summary = builder.summary();
+  assert.equal(summary.vehicleObservations, 4);
+  assert.equal(summary.rejectedSamples, 1);
+  assert.equal(summary.rejectedVehicleObservations, 1);
+  assert.equal(summary.rejectedFeedPairs, 1);
 });
 
 test('aggregates speed buckets across routes and keeps waits route-specific', () => {
@@ -1996,8 +2287,10 @@ test('reports over-limit speed samples with source and vehicle-stop details', ()
 
 test('drops a stationary stale-GPS feed and bridges its previous and next samples', () => {
   const incidents = [];
+  const feedDispositions = [];
   const builder = createBuilder({
-    onGpsSignalLost: (incident) => incidents.push(incident)
+    onGpsSignalLost: (incident) => incidents.push(incident),
+    onFeedDisposition: (disposition) => feedDispositions.push(disposition)
   });
   const timetable = createTimetable();
   const samples = [
@@ -2051,6 +2344,10 @@ test('drops a stationary stale-GPS feed and bridges its previous and next sample
   assert.equal(incidents[0].recoveryIntervalSeconds, 1);
   assert.equal(incidents[0].stationaryDistanceMeters, 0);
   assert.ok(incidents[0].recoveryDistanceMeters > 5);
+  assert.deepEqual(
+    feedDispositions.map(({ kind, reason }) => [kind, reason]),
+    [['dropped', 'stationary-gps-merged']]
+  );
   assert.equal(incidents[0].bridgedElapsedSeconds, 17);
   assert.equal(incidents[0].bridgedProgressMeters, 46);
   assert.ok(Math.abs(incidents[0].correctedSpeedMps - 46 / 17) < 0.01);

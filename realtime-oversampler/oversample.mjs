@@ -20,6 +20,7 @@ function parseArguments(args) {
     archiveDirectory: defaultArchiveDirectory,
     maxArchives: null,
     maxMessages: null,
+    skipMessages: 0,
     outputFile: null,
     displayMessages: 'none'
   };
@@ -27,13 +28,16 @@ function parseArguments(args) {
 
   for (let index = 0; index < args.length; index++) {
     const argument = args[index];
-    if (argument === '--max-archives' || argument === '--max-messages') {
+    if (argument === '--max-archives' ||
+        argument === '--max-messages' ||
+        argument === '--skip-messages') {
       const value = Number(args[++index]);
       if (!Number.isSafeInteger(value) || value < 0) {
         throw new Error(`${argument} requires a non-negative integer`);
       }
       if (argument === '--max-archives') options.maxArchives = value;
-      else options.maxMessages = value;
+      else if (argument === '--max-messages') options.maxMessages = value;
+      else options.skipMessages = value;
     } else if (argument === '--output') {
       const value = args[++index];
       if (!value || value.startsWith('--')) {
@@ -76,6 +80,58 @@ function formatTimestamp(timestamp) {
   return Number.isNaN(date.valueOf())
     ? `${timestamp} epoch seconds`
     : `${date.toISOString()} (${timestamp})`;
+}
+
+function formatBackwardTimestampRejection({ sample, previous, secondsBehind }) {
+  const vehicleTime = sample.vehicleTimestamp ?? sample.timestamp;
+  const previousVehicleTime =
+    previous.vehicleTimestamp ?? previous.timestamp;
+  return (
+    `Backward-timestamp feed rejected: vehicle id=${sample.vehicleId || '<missing>'}, ` +
+    `name=${sample.vehicleName || '<missing>'}` +
+    `${sample.entityId ? `, entity=${sample.entityId}` : ''}, ` +
+    `trip=${sample.tripId}, route=${sample.routeName || '<unknown>'}\n` +
+    `  Rejected feed: ${formatFeedSource(sample.source)}; ` +
+    `vehicle time ${formatTimestamp(vehicleTime)}; ` +
+    `sequence ${sample.stopIndex + 1}, stop ${sample.stopId}; ` +
+    `GPS ${formatGpsPosition(sample.position)}; ` +
+    `stop_distance ${formatStopDistance(sample)}; ` +
+    `progress ${sample.progress.toFixed(1)} m\n` +
+    `  Comparison feed: ${formatFeedSource(previous.source)}; ` +
+    `vehicle time ${formatTimestamp(previousVehicleTime)}; ` +
+    `sequence ${previous.stopIndex + 1}, stop ${previous.stopId}; ` +
+    `GPS ${formatGpsPosition(previous.position)}; ` +
+    `stop_distance ${formatStopDistance(previous)}; ` +
+    `progress ${previous.progress.toFixed(1)} m\n` +
+    `  Rejected timestamp is ${secondsBehind.toFixed(1)} s earlier; ` +
+    `feed was excluded before corrections and GPS-drift scoring and did not ` +
+    `replace the retained feed baseline.`
+  );
+}
+
+function formatGpsBasedNextStopCorrectionRejection({ sample, previous }) {
+  const vehicleTime = sample.vehicleTimestamp ?? sample.timestamp;
+  const previousVehicleTime =
+    previous.vehicleTimestamp ?? previous.timestamp;
+  return (
+    `GPS-based next-stop correction rejected feed: ` +
+    `vehicle id=${sample.vehicleId || '<missing>'}, ` +
+    `name=${sample.vehicleName || '<missing>'}, trip=${sample.tripId}\n` +
+    `  Rejected feed: ${formatFeedSource(sample.source)}; ` +
+    `vehicle time ${formatTimestamp(vehicleTime)}; ` +
+    `sequence ${sample.stopIndex + 1}, stop ${sample.stopId}; ` +
+    `GPS ${formatGpsPosition(sample.position)}; ` +
+    `stop_distance ${formatStopDistance(sample)}; ` +
+    `progress ${sample.progress.toFixed(1)} m\n` +
+    `  Retained feed: ${formatFeedSource(previous.source)}; ` +
+    `vehicle time ${formatTimestamp(previousVehicleTime)}; ` +
+    `sequence ${previous.stopIndex + 1}, stop ${previous.stopId}; ` +
+    `GPS ${formatGpsPosition(previous.position)}; ` +
+    `stop_distance ${formatStopDistance(previous)}; ` +
+    `progress ${previous.progress.toFixed(1)} m\n` +
+    `  Active correction could not be carried to this zero-distance feed; ` +
+    `the feed was excluded and the retained baseline was preserved.`
+  );
 }
 
 function formatStopDistance(sample) {
@@ -299,6 +355,49 @@ function formatNextStopDistanceCorrection(incident) {
   );
 }
 
+function formatGpsBasedNextStopZeroCorrection(incident) {
+  const trigger = incident.trigger === 'next-stop-change'
+    ? 'new next stop'
+    : 'continued zero report';
+  const legValidation = incident.correctionOriginShapeLegsValid
+    ? 'valid'
+    : 'invalid; geometry-only projection used instead';
+  return (
+    `GPS-based next-stop zero stop_distance corrected: ` +
+    `vehicle id=${incident.vehicleId || '<missing>'}, ` +
+    `name=${incident.vehicleName || '<missing>'}` +
+    `${incident.entityId ? `, entity=${incident.entityId}` : ''}, ` +
+    `trip=${incident.tripId}; trigger=${trigger}\n` +
+    `  Previous feed: ${formatFeedSource(incident.previous.source)}; ` +
+    `vehicle time ${formatTimestamp(incident.previous.vehicleTimestamp)}; ` +
+    `sequence ${incident.previous.stopIndex + 1}, stop ${incident.previous.stopId}; ` +
+    `GPS ${formatGpsPosition(incident.previous.position)}; ` +
+    `stop_distance ${formatStopDistance(incident.previous)}\n` +
+    `  Current feed: ${formatFeedSource(incident.current.source)}; ` +
+    `vehicle time ${formatTimestamp(incident.current.vehicleTimestamp)}; ` +
+    `sequence ${incident.current.stopIndex + 1}, stop ${incident.current.stopId}; ` +
+    `GPS ${formatGpsPosition(incident.current.position)}; ` +
+    `stop_distance ${incident.reportedStopDistance.toFixed(1)} -> ` +
+    `${incident.correctedStopDistance.toFixed(1)} m effective graph distance\n` +
+    `  Geometry projections: previous GPS chainage ` +
+    `${incident.previousProjection.shapeDistance.toFixed(1)} m, current GPS chainage ` +
+    `${incident.projection.shapeDistance.toFixed(1)} m, ` +
+    `movement ${incident.geometryMovementMeters.toFixed(1)} m; ` +
+    `${incident.projection.crossTrackMeters.toFixed(1)} m from shape; ` +
+    `stop chainage ${incident.stopProjection.shapeDistance.toFixed(1)} m, ` +
+    `${incident.stopProjection.crossTrackMeters.toFixed(1)} m from shape; ` +
+    `${incident.physicalStopDistance.toFixed(1)} m signed geometry distance to stop; ` +
+    `graph-frame calculated stop chainage ` +
+    `${incident.calculatedStopShapeDistance.toFixed(1)} m; ` +
+    `chainage offset ${incident.chainageOffset.toFixed(1)} m, ` +
+    `graph progress ${incident.geometryProgress.toFixed(1)} m; ` +
+    `${incident.distanceToStopMeters.toFixed(1)} m direct GPS-to-stop; ` +
+    `origin leg validation ${legValidation}\n` +
+    `  Zero correction remains active for this next stop until a nonzero ` +
+    `stop_distance arrives, the next stop changes, or stop-sequence quarantine begins.`
+  );
+}
+
 function formatShortIntervalStopDistanceCorrection(incident) {
   return (
     `Short-interval stop_distance reconciled: vehicle id=${incident.vehicleId || '<missing>'}, ` +
@@ -490,9 +589,15 @@ function formatDoorSensorAnomaly(anomaly) {
   );
 }
 
-function displayResultSummary(summary, totalMessages, archiveCount) {
+function displayResultSummary(
+  summary,
+  totalMessages,
+  skippedMessages,
+  archiveCount
+) {
   console.info(
-    `Parsed ${totalMessages} protobuf message(s) across ${archiveCount} selected archive(s)`
+    `Parsed ${totalMessages} protobuf message(s); skipped ${skippedMessages} ` +
+    `archive message(s) without decoding across ${archiveCount} selected archive(s)`
   );
   console.info(
     `Built speed graph: ${summary.directedStopPairs} directed stop pair(s), ` +
@@ -585,6 +690,7 @@ function displayResultSummary(summary, totalMessages, archiveCount) {
 async function processArchive(
   archivePath,
   streamReader,
+  messageSkipCount,
   messageLimit,
   displayState,
   timetableLoader,
@@ -593,7 +699,9 @@ async function processArchive(
 ) {
   let decodedCount = 0;
   let completed = true;
-  for await (const { name, message } of streamReader.readMessages()) {
+  for await (const { name, message } of streamReader.readMessages({
+    skipMessages: messageSkipCount
+  })) {
     const timetable = await timetableLoader.loadForFeed(message);
     speedGraph.processFeed(message, timetable, {
       archiveName: path.basename(archivePath),
@@ -614,7 +722,11 @@ async function processArchive(
       break;
     }
   }
-  return { decodedCount, completed };
+  return {
+    decodedCount,
+    skippedCount: streamReader.skippedMessages,
+    completed
+  };
 }
 
 export async function main(args = process.argv.slice(2)) {
@@ -622,6 +734,7 @@ export async function main(args = process.argv.slice(2)) {
     archiveDirectory,
     maxArchives,
     maxMessages,
+    skipMessages,
     outputFile,
     displayMessages
   } = parseArguments(args);
@@ -666,6 +779,8 @@ export async function main(args = process.argv.slice(2)) {
       status.log(formatDelayedStopDistanceIncident(incident)),
     onNextStopDistanceCorrection: (incident) =>
       status.log(formatNextStopDistanceCorrection(incident)),
+    onGpsBasedNextStopZeroCorrection: (incident) =>
+      status.log(formatGpsBasedNextStopZeroCorrection(incident)),
     onShortIntervalStopDistanceCorrection: (incident) =>
       status.log(formatShortIntervalStopDistanceCorrection(incident)),
     onShortIntervalStopDistanceCorrectionRejected: (incident) =>
@@ -677,7 +792,16 @@ export async function main(args = process.argv.slice(2)) {
     onStopSequenceRegression: (incident) =>
       status.log(formatStopSequenceRegression(incident)),
     onGpsDriftRejection: (incident) =>
-      status.log(formatGpsDriftRejection(incident))
+      status.log(formatGpsDriftRejection(incident)),
+    onFeedDisposition: (disposition) => {
+      if (disposition.reason === 'timestamp-regression') {
+        status.log(formatBackwardTimestampRejection(disposition));
+      } else if (
+        disposition.reason === 'gps-based-next-stop-correction-failed'
+      ) {
+        status.log(formatGpsBasedNextStopCorrectionRejection(disposition));
+      }
+    }
   });
   const status = new StatusDisplay({
     totalFiles: archiveSizes.length,
@@ -693,17 +817,20 @@ export async function main(args = process.argv.slice(2)) {
   });
 
   let finished = false;
+  let totalSkippedMessages = 0;
   status.start();
   try {
     for (const { path: archivePath, size } of archiveSizes) {
       const remainingMessages = maxMessages === null ? null : maxMessages - totalMessages;
       if (remainingMessages !== null && remainingMessages <= 0) break;
+      const remainingMessagesToSkip = skipMessages - totalSkippedMessages;
       status.beginFile(path.basename(archivePath), size);
       const result = await processArchive(
         archivePath,
         new StreamReader(archivePath, {
           onProgress: (bytesRead) => status.updateFileBytes(bytesRead)
         }),
+        remainingMessagesToSkip,
         remainingMessages,
         displayState,
         timetableLoader,
@@ -711,6 +838,7 @@ export async function main(args = process.argv.slice(2)) {
         status
       );
       totalMessages += result.decodedCount;
+      totalSkippedMessages += result.skippedCount;
       if (!result.completed) break;
       status.completeFile();
     }
@@ -728,7 +856,12 @@ export async function main(args = process.argv.slice(2)) {
   }
 
   const graphSummary = speedGraph.summary();
-  displayResultSummary(graphSummary, totalMessages, archives.length);
+  displayResultSummary(
+    graphSummary,
+    totalMessages,
+    totalSkippedMessages,
+    archives.length
+  );
   let output = null;
   if (outputFile) {
     const encoded = encodeGraphExport(speedGraph, graphSummary, {

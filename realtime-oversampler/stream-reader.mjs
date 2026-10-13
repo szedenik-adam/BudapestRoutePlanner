@@ -32,11 +32,16 @@ export class StreamReader {
   constructor(archivePath, { onProgress } = {}) {
     this.archivePath = archivePath;
     this.onProgress = onProgress;
+    this.skippedMessages = 0;
   }
 
-  async *readMessages() {
-    decoderPromise ??= loadFeedMessageDecoder();
-    const decodeFeedMessage = await decoderPromise;
+  async *readMessages({ skipMessages = 0 } = {}) {
+    if (!Number.isSafeInteger(skipMessages) || skipMessages < 0) {
+      throw new Error('skipMessages must be a non-negative integer');
+    }
+    this.skippedMessages = 0;
+    let remainingSkipMessages = skipMessages;
+    let decodeFeedMessage = null;
     const worker = new Worker(new URL('./stream-reader-worker.mjs', import.meta.url), {
       workerData: { archivePath: this.archivePath }
     });
@@ -82,6 +87,16 @@ export class StreamReader {
       while (true) {
         const feed = await nextFeed();
         if (feed === null) break;
+        if (remainingSkipMessages > 0) {
+          remainingSkipMessages--;
+          this.skippedMessages++;
+          worker.postMessage({ type: 'ack' });
+          continue;
+        }
+        if (!decodeFeedMessage) {
+          decoderPromise ??= loadFeedMessageDecoder();
+          decodeFeedMessage = await decoderPromise;
+        }
         const message = decodeFeedMessage(Buffer.from(feed.data));
         worker.postMessage({ type: 'ack' });
         yield { name: feed.name, message };

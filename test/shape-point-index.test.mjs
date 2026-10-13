@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  createTimetableShapeDistanceMeasurer,
+  createTimetableShapeGeometryDistanceMeasurer,
+  createTimetableShapeGeometryProjector,
   createTimetableShapeProjector,
   createTimetableShapeDistanceValidator,
   createTimetableShapePointIndexer
@@ -127,6 +130,104 @@ test('projects GPS positions onto the trip shape within requested chainage bound
   assert.ok(Math.abs(projection.shapeDistance - 50) < 0.01);
   assert.ok(Math.abs(projection.crossTrackMeters - 11.1) < 0.2);
   assert.ok(Math.abs(projection.metersPerUnit - 1.113) < 0.01);
+});
+
+test('projects a GPS position to the exact first shape point', () => {
+  const shape = [
+    [0, 0, 0],
+    [100, 0.001, 0],
+    [200, 0.002, 0]
+  ];
+  const projectPosition = createTimetableShapeProjector({
+    shapes: { 'shape-1': shape }
+  });
+  const projection = projectPosition(
+    makeTrip([0, 100, 200]),
+    { longitude: 0, latitude: 0.0001 },
+    { minShapeDistance: 0, maxShapeDistance: 0 }
+  );
+
+  assert.ok(projection);
+  assert.equal(projection.shapeDistance, 0);
+  assert.ok(Math.abs(projection.crossTrackMeters - 11.1) < 0.2);
+});
+
+test('measures geometry distance along a timetable shape between chainages', () => {
+  const trip = makeTrip([0, 100, 200]);
+  const measureDistance = createTimetableShapeDistanceMeasurer({
+    shapes: {
+      'shape-1': [
+        [0, 0, 0],
+        [100, 0.001, 0],
+        [200, 0.002, 0]
+      ]
+    }
+  });
+
+  assert.ok(Math.abs(measureDistance(trip, 50, 150) - 111.2) < 0.2);
+  assert.equal(measureDistance(trip, 50, 500), null);
+});
+
+test('projects and measures shape geometry independently of shape_dist_traveled', () => {
+  const trip = makeTrip([0, 100, 200]);
+  const timetable = {
+    shapes: {
+      'shape-1': [
+        [1000, 0, 0],
+        [900, 0.001, 0],
+        [10, 0.002, 0]
+      ]
+    }
+  };
+  const projectGeometry =
+    createTimetableShapeGeometryProjector(timetable);
+  const measureGeometry =
+    createTimetableShapeGeometryDistanceMeasurer(timetable);
+  const current = projectGeometry(
+    trip,
+    { longitude: 0.001, latitude: 0 }
+  );
+  const stop = projectGeometry(
+    trip,
+    { longitude: 0.002, latitude: 0 }
+  );
+
+  assert.ok(current);
+  assert.ok(stop);
+  assert.ok(Math.abs(current.shapeDistance - 111.2) < 0.2);
+  assert.ok(Math.abs(stop.shapeDistance - 222.4) < 0.2);
+  assert.ok(
+    Math.abs(
+      measureGeometry(trip, current.shapeDistance, stop.shapeDistance) -
+        111.2
+    ) < 0.2
+  );
+});
+
+test('constrains geometry projection to a stop-sequence shape-point range', () => {
+  const trip = makeTrip([0, 1, 2, 3]);
+  const projectPosition = createTimetableShapeGeometryProjector({
+    shapes: {
+      'shape-1': [
+        [0, 0, 0],
+        [1, 0.001, 0],
+        [2, 0.001, 0.001],
+        [3, 0, 0.001]
+      ]
+    }
+  });
+  const position = { longitude: 0.0005, latitude: 0.0011 };
+  const lowerLeg = projectPosition(trip, position, {
+    minShapePointIndex: 0,
+    maxShapePointIndex: 1
+  });
+  const upperLeg = projectPosition(trip, position, {
+    minShapePointIndex: 2,
+    maxShapePointIndex: 3
+  });
+
+  assert.ok(lowerLeg.crossTrackMeters > 100);
+  assert.ok(upperLeg.crossTrackMeters < 20);
 });
 
 test('reports detailed errors and rejects legs with out-of-range shape distances', () => {

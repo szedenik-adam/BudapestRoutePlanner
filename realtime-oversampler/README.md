@@ -80,14 +80,26 @@ Before graph calculations, the builder stages up to (**12**) feeds per vehicle i
 * **Open-Door Zero Distance Handling**: Managed by `correctDoorOpenStopDistance` to correct zero reported distances using GPS-to-stop proximity checks and candidate speed thresholds. Logged as "Early door_open zero stop_distance corrected".
 * **Closed-Door Zero Distance Snaps**: Managed by `correctClosedDoorStopDistanceSnap` to correct positive-to-zero distance drops when GPS fixes are within range and closure agrees with movement. Logged as "Closed-door zero stop_distance snap corrected".
 
-### 7. Backward Stop Sequence Quarantine (`speed-graph.mjs`)[cite: 10]
+### 7. Backward Stop Sequence Quarantine (`speed-graph.mjs`)
 * GPS boundary bouncing or manual accidental premature advance then manual rollback could cause invalid `next_stop` values in the feed.
 * Quarantines vehicles moving backward in stop sequence using `startStopSequenceRegression`, invalidating feeds via `invalidateStopSequenceRegressionFeed`, and resuming via `recoverStopSequenceRegression` and `validateStopDistanceWithGps`. Quarantined feeds contribute no data; the first validated feed ends quarantine as a new baseline.
 * Logged as "Stop-sequence regression".
 
+### 8. Backward Vehicle-Timestamp Rejection (`speed-graph.mjs`)
+* Rejects feeds that arrive with a vehicle timestamp older than the current baseline. This prevents stale states from corrupting distance or speed calculations.
+* Checked in `processFeed` before any correction; rejected samples are excluded.
+* Logged as "Backward-timestamp feed rejected".
+
+### 9. GPS-Based Zero `stop_distance` After Next-Stop Change (`speed-graph.mjs`)
+* Addresses a provider glitch where a next-stop change combined with corrupted GTFS shape distances (`shape_dist_traveled`) causes the feed to report an erroneous zero `stop_distance` even though GPS shows the vehicle is still far away. This issue lasts until `next_stop` is reached).
+* When triggered during a closed-door next-stop change, `correctGpsBasedNextStopZeroDistance` uses shape geometry to calculate the true distance. It also takes into account the corrupted `shape_dist_traveled` to prevent false jumps during speed calculation. To activate, the stop_distance error must be more than **50 m**.
+* Subsequent `stop_distance=0` feeds are corrected until the next stop changes, or backward stop sequence quarantine begins (7th anomaly correction).
+* Rejects subsequent stop_distance=0 feeds that fail geometric validation, preserving the previous valid baseline.
+* Logged as "GPS-based next-stop zero stop_distance corrected".
+
 ## Output
 
-* **Diagnostics & Logging**: Feed-to-feed speeds **> 35 m/s** are logged as detected (alongside GPS-loss, delayed stop distance, door corrections, and sensor anomalies). During TTY runs, logs use the scrolling region above the status footer.
+* **Diagnostics & Logging**: Feed-to-feed speeds **> 35 m/s** are logged as detected (alongside timestamp rejections, GPS-based next-stop corrections, GPS-loss, delayed stop distance, door corrections, and sensor anomalies). During TTY runs, logs use the scrolling region above the status footer.
 * **Completion Output**: Prints overall and per-class bucket sample counts, mean/median samples per populated bucket, and bucket distributions by sample ranges (`1`, `2–4`, `5–9`, `10–24`, and `25+`).
 * Also reports approximate median and 95th-percentile speeds using **0.5 m/s histogram bins**, exact maximum speed, classified/unclassified/pending legs, rejected observations/samples/pairs, and open-door wait coverage.
 
@@ -103,15 +115,29 @@ node realtime-oversampler/oversample.mjs
 node realtime-oversampler/oversample.mjs /path/to/realtime
 ```
 
-* **Limit archives and messages** (both accept `0`):
+* **Limit archives and messages, or skip to a feed range** (`--max-archives`, `--max-messages`, and `--skip-messages` accept `0`):
 ```sh
-node realtime-oversampler/oversample.mjs /path/to/realtime --max-archives 2 --max-messages 5
+node realtime-oversampler/oversample.mjs /path/to/realtime \
+  --max-archives 2 --skip-messages 300 --max-messages 5
 ```
+`--skip-messages` skips that many archive entries across selected archives without protobuf decoding.
+`--max-messages` then limits the number of messages processed after the skip.
 
 * **Display decoded messages** (options: `none` [default], `first-and-last`, `all`):
 ```sh
 node realtime-oversampler/oversample.mjs /path/to/realtime --display-messages all
 ```
+
+* **Inspect a speed outlier** (use an archive path or a name in `recorded-content/`; speed values match the displayed one-decimal value, or use `max`):
+```sh
+node realtime-oversampler/analyze-speed-outlier.mjs \
+  2026-10-06T11.tar.gz max 10 10
+```
+The last two arguments specify archive feed messages before and after the outlier's current feed.
+The report includes transition and GPS delta/speed details, plus a vehicle-only table with shape
+offsets, GPS-derived stop distance and next stop, and graph disposition. Rejected observations and
+feed pairs are labeled; raw values remain visible. Stale-GPS feeds that were dropped and bridged
+are marked too.
 
 * **Export graph and health summary**:
 ```sh

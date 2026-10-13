@@ -127,6 +127,48 @@ function createShapeModel(shape) {
   };
 }
 
+function createGeometryShapeModel(shape) {
+  if (!Array.isArray(shape) || shape.length < 2) {
+    return { error: 'common shape is missing or has fewer than two points' };
+  }
+
+  const points = shape.map((point) => ({
+    longitude: finiteNumber(point?.[1]),
+    latitude: finiteNumber(point?.[2])
+  }));
+  for (let index = 0; index < points.length; index++) {
+    const point = points[index];
+    if (point.longitude === null ||
+        point.latitude === null ||
+        point.longitude < -180 ||
+        point.longitude > 180 ||
+        point.latitude < -90 ||
+        point.latitude > 90) {
+      return { error: `common shape point ${index} has invalid coordinates` };
+    }
+  }
+
+  const distances = [0];
+  for (let index = 1; index < points.length; index++) {
+    distances.push(
+      distances[index - 1] +
+      haversineMeters(points[index - 1], points[index])
+    );
+  }
+  if (distances.at(-1) === 0) {
+    return { error: 'common shape has no measurable geometry distance' };
+  }
+
+  return {
+    points: points.map((point, index) => ({
+      ...point,
+      distance: distances[index]
+    })),
+    distances,
+    metersPerUnit: 1
+  };
+}
+
 function projectPositionOntoShape(
   shapeModel,
   position,
@@ -141,6 +183,14 @@ function projectPositionOntoShape(
       position.longitude < -180 ||
       position.longitude > 180) {
     return null;
+  }
+  if (minShapeDistance === maxShapeDistance &&
+        minShapeDistance === shapeModel.distances[0]) {
+      return {
+        shapeDistance: minShapeDistance,
+        crossTrackMeters: haversineMeters(position, shapeModel.points[0]),
+        metersPerUnit: shapeModel.metersPerUnit
+      };
   }
   const metersPerDegreeLat = 111132;
   const metersPerDegreeLon =
@@ -223,6 +273,93 @@ export function createTimetableShapeProjector(timetable) {
       minShapeDistance,
       maxShapeDistance
     );
+  };
+}
+
+export function createTimetableShapeDistanceMeasurer(timetable) {
+  const shapeModels = new Map();
+  return (trip, startShapeDistance, endShapeDistance) => {
+    const shapeId = String(trip?.shape_id);
+    if (!shapeModels.has(shapeId)) {
+      const shape = timetable.shapes instanceof Map
+        ? timetable.shapes.get(shapeId)
+        : timetable.shapes?.[shapeId];
+      shapeModels.set(shapeId, createShapeModel(shape));
+    }
+    const shapeModel = shapeModels.get(shapeId);
+    if (shapeModel.error) return null;
+
+    const measurement = measureShapeLength(
+      shapeModel,
+      startShapeDistance,
+      endShapeDistance,
+      0
+    );
+    return measurement.error ? null : measurement.lengthMeters;
+  };
+}
+
+export function createTimetableShapeGeometryProjector(timetable) {
+  const shapeModels = new Map();
+  return (trip, position, {
+    minShapePointIndex = 0,
+    maxShapePointIndex
+  } = {}) => {
+    const shapeId = String(trip?.shape_id);
+    if (!shapeModels.has(shapeId)) {
+      const shape = timetable.shapes instanceof Map
+        ? timetable.shapes.get(shapeId)
+        : timetable.shapes?.[shapeId];
+      shapeModels.set(shapeId, createGeometryShapeModel(shape));
+    }
+    const shapeModel = shapeModels.get(shapeId);
+    if (shapeModel.error) return null;
+    const parsedMinimumIndex = Number(minShapePointIndex);
+    const parsedMaximumIndex = maxShapePointIndex === undefined
+      ? shapeModel.points.length - 1
+      : Number(maxShapePointIndex);
+    if (!Number.isFinite(parsedMinimumIndex) ||
+        !Number.isFinite(parsedMaximumIndex)) {
+      return null;
+    }
+    const minimumIndex = Math.max(
+      0,
+      Math.floor(parsedMinimumIndex)
+    );
+    const maximumIndex = Math.min(
+      shapeModel.points.length - 1,
+      Math.floor(parsedMaximumIndex)
+    );
+    if (minimumIndex > maximumIndex) return null;
+    return projectPositionOntoShape(
+      shapeModel,
+      position,
+      shapeModel.distances[minimumIndex],
+      shapeModel.distances[maximumIndex]
+    );
+  };
+}
+
+export function createTimetableShapeGeometryDistanceMeasurer(timetable) {
+  const shapeModels = new Map();
+  return (trip, startGeometryDistance, endGeometryDistance) => {
+    const shapeId = String(trip?.shape_id);
+    if (!shapeModels.has(shapeId)) {
+      const shape = timetable.shapes instanceof Map
+        ? timetable.shapes.get(shapeId)
+        : timetable.shapes?.[shapeId];
+      shapeModels.set(shapeId, createGeometryShapeModel(shape));
+    }
+    const shapeModel = shapeModels.get(shapeId);
+    if (shapeModel.error) return null;
+
+    const measurement = measureShapeLength(
+      shapeModel,
+      startGeometryDistance,
+      endGeometryDistance,
+      0
+    );
+    return measurement.error ? null : measurement.lengthMeters;
   };
 }
 

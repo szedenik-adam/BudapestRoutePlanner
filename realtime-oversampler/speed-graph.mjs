@@ -6,7 +6,12 @@ import {
   gpsDriftLookbackFeeds,
   gpsDriftScoreThreshold
 } from './gps-drift-filter.mjs';
-import { createTimetableShapeProjector } from './shape-point-index.mjs';
+import {
+  createTimetableShapeDistanceMeasurer,
+  createTimetableShapeProjector,
+  createTimetableShapeGeometryDistanceMeasurer,
+  createTimetableShapeGeometryProjector
+} from './shape-point-index.mjs';
 
 const require = createRequire(import.meta.url);
 const turf = require('../scripts/external/turf.min.js');
@@ -133,6 +138,23 @@ function setReportedStopDistance(sample, stopDistance) {
   sample.stopDistanceCorrectionRawValue = sample.feedReportedStopDistance;
 }
 
+function getStopShapePointBounds(trip, stopIndex) {
+  const stopPointIndex = trip?.stopShapePointIndex?.[stopIndex];
+  if (!Number.isInteger(stopPointIndex)) return null;
+  const previousStopPointIndex = stopIndex > 0
+    ? trip.stopShapePointIndex?.[stopIndex - 1]
+    : stopPointIndex;
+  if (!Number.isInteger(previousStopPointIndex) ||
+      previousStopPointIndex > stopPointIndex) {
+    return null;
+  }
+  return {
+    minShapePointIndex: Math.max(0, previousStopPointIndex - 1),
+    maxShapePointIndex: stopPointIndex + 1,
+    stopPointIndex
+  };
+}
+
 function getVehicleKey(entity) {
   const vehicle = entity.vehicle;
   const key = vehicle.vehicle?.id ?? vehicle.vehicle?.label ?? entity.id;
@@ -160,7 +182,12 @@ function getTimetableIndexes(timetable) {
   return {
     stopIdByIndex: invertIndexMap(timetable.stopMap),
     routeIdByIndex: invertIndexMap(timetable.routeMap),
-    projectPositionOnShape: createTimetableShapeProjector(timetable)
+    projectPositionOnShape: createTimetableShapeProjector(timetable),
+    measureShapeDistance: createTimetableShapeDistanceMeasurer(timetable),
+    projectPositionOnShapeGeometry:
+      createTimetableShapeGeometryProjector(timetable),
+    measureShapeGeometryDistance:
+      createTimetableShapeGeometryDistanceMeasurer(timetable)
   };
 }
 
@@ -267,6 +294,7 @@ function makeVehicleState(sample, indexes) {
     lastGpsDriftSpeedMps: null,
     lastGpsDriftScore: 0,
     stopSequenceRegression: null,
+    gpsBasedZeroStopDistanceCorrection: null,
     trip: sample.trip,
     routeId: sample.routeId,
     stopIdByIndex: indexes.stopIdByIndex,
@@ -369,7 +397,9 @@ export class SpeedGraphBuilder {
     onDoorOpenStopDistanceCorrection = () => {},
     onClosedDoorStopDistanceCorrection = () => {},
     onStopSequenceRegression = () => {},
-    onGpsDriftRejection = () => {}
+    onGpsDriftRejection = () => {},
+    onFeedDisposition = () => {},
+    onGpsBasedNextStopZeroCorrection = () => {}
   } = {}) {
     this.onSpeedOutlier = onSpeedOutlier;
     this.onDoorSensorStuck = onDoorSensorStuck;
@@ -385,6 +415,9 @@ export class SpeedGraphBuilder {
       onClosedDoorStopDistanceCorrection;
     this.onStopSequenceRegression = onStopSequenceRegression;
     this.onGpsDriftRejection = onGpsDriftRejection;
+    this.onFeedDisposition = onFeedDisposition;
+    this.onGpsBasedNextStopZeroCorrection =
+      onGpsBasedNextStopZeroCorrection;
     this.speedGraph = new Map();
     this.waitingGraph = new Map();
     this.vehicleStates = new Map();
@@ -444,6 +477,12 @@ export class SpeedGraphBuilder {
         source
       );
       if (!sample) {
+        this.onFeedDisposition({
+          kind: 'rejected',
+          reason: 'invalid-observation',
+          entity,
+          source
+        });
         this.rejectedSamples++;
         this.rejectedVehicleObservations++;
         continue;
@@ -497,7 +536,27 @@ export class SpeedGraphBuilder {
         continue;
       }
 
-      sample = this.correctNextStopDistance(state, sample);
+      if (sample.timestamp < state.lastFeedSample.timestamp) {
+        this.onFeedDisposition({
+          kind: 'rejected',
+          reason: 'timestamp-regression',
+          sample,
+          previous: state.lastFeedSample,
+          secondsBehind: state.lastFeedSample.timestamp - sample.timestamp
+        });
+        this.rejectedSamples++;
+        this.rejectedVehicleObservations++;
+        this.rejectedFeedPairs++;
+        continue;
+      }
+
+      sample = this.correctNextStopDistance(
+        state,
+        sample,
+        indexes.projectPositionOnShapeGeometry,
+        indexes.measureShapeGeometryDistance
+      );
+      if (!sample) continue;
       sample = this.correctDoorOpenStopDistance(state, sample);
       sample = this.correctShortIntervalStopDistance(
         state,
@@ -698,6 +757,13 @@ export class SpeedGraphBuilder {
       this.gpsDriftRejectedFeeds++;
       this.rejectedSamples++;
       this.rejectedVehicleObservations++;
+      this.onFeedDisposition({
+        kind: 'rejected',
+        reason: 'gps-drift',
+        sample: head.sample,
+        rejectionReason: head.rejectionReason,
+        score: head.score
+      });
       this.onGpsDriftRejection({
         vehicleId: head.sample.vehicleId,
         vehicleName: head.sample.vehicleName,
@@ -742,6 +808,13 @@ export class SpeedGraphBuilder {
       }
       this.flushPendingDoorOpenSensorSamples(state);
       this.stationaryGpsSamplesDropped += mergedSamples.length;
+      for (const sample of mergedSamples) {
+        this.onFeedDisposition({
+          kind: 'dropped',
+          reason: 'stationary-gps-merged',
+          sample
+        });
+      }
       const bridgedPrevious = state.lastSample;
       const recoverySample = recovery.sample;
       const bridgedElapsedSeconds =
@@ -899,9 +972,15 @@ export class SpeedGraphBuilder {
   }
 
   // Rebase stop distance at a stop change and once more if the provider quickly settles it.
-  correctNextStopDistance(state, sample) {
+  correctNextStopDistance(
+    state,
+    sample,
+    projectPositionOnShape,
+    measureShapeDistance
+  ) {
     const previous = state.lastFeedSample;
     if (state.stopSequenceRegression) {
+      state.gpsBasedZeroStopDistanceCorrection = null;
       sample.nextStopDistanceCorrectionPending = false;
       return sample;
     }
@@ -910,6 +989,14 @@ export class SpeedGraphBuilder {
       sample.stopIndex >= previous.stopIndex &&
       (sample.stopIndex !== previous.stopIndex ||
         sample.stopId !== previous.stopId);
+    const gpsBasedCorrection = state.gpsBasedZeroStopDistanceCorrection;
+    if (gpsBasedCorrection &&
+        (!sameTrip ||
+         sample.stopIndex !== gpsBasedCorrection.stopIndex ||
+         sample.stopId !== gpsBasedCorrection.stopId ||
+         sample.reportedStopDistance !== 0)) {
+      state.gpsBasedZeroStopDistanceCorrection = null;
+    }
     const shapeLegsValid = !nextStopChanged ||
       Array.from(
         { length: sample.stopIndex - previous.stopIndex },
@@ -942,6 +1029,33 @@ export class SpeedGraphBuilder {
       return sample;
     }
 
+    if (state.gpsBasedZeroStopDistanceCorrection &&
+        sample.reportedStopDistance === 0) {
+      const activeCorrection = state.gpsBasedZeroStopDistanceCorrection;
+      if (this.correctGpsBasedNextStopZeroDistance(
+        state,
+        previous,
+        sample,
+        projectPositionOnShape,
+        measureShapeDistance,
+        'continued-zero',
+        shapeLegsValid,
+        activeCorrection.shapePointBounds
+      )) {
+        return sample;
+      }
+      this.rejectedSamples++;
+      this.rejectedVehicleObservations++;
+      this.rejectedFeedPairs++;
+      this.onFeedDisposition({
+        kind: 'rejected',
+        reason: 'gps-based-next-stop-correction-failed',
+        sample,
+        previous
+      });
+      return null;
+    }
+
     const followUpAfterStopChange = doorsClosed &&
       shapeLegsValid &&
       previous.nextStopDistanceCorrectionPending &&
@@ -950,6 +1064,20 @@ export class SpeedGraphBuilder {
 
     sample.nextStopDistanceCorrectionPending =
       eligibleNextStopChange && doorsClosed;
+    if (nextStopChanged &&
+        doorsClosed &&
+        sample.reportedStopDistance === 0 &&
+        this.correctGpsBasedNextStopZeroDistance(
+         state,
+         previous,
+         sample,
+         projectPositionOnShape,
+         measureShapeDistance,
+         'next-stop-change',
+         shapeLegsValid
+        )) {
+      return sample;
+    }
     if (!doorsClosed ||
         (!eligibleNextStopChange && !followUpAfterStopChange)) {
       return sample;
@@ -994,6 +1122,166 @@ export class SpeedGraphBuilder {
       shapeDistanceDelta
     });
     return sample;
+  }
+
+  correctGpsBasedNextStopZeroDistance(
+    state,
+    previous,
+    sample,
+    projectPositionOnShape,
+    measureShapeDistance,
+    trigger,
+    shapeLegsValid,
+    shapePointBounds = null
+  ) {
+    const vehicleTimeDeltaSeconds =
+      previous.vehicleTimestamp !== null &&
+      sample.vehicleTimestamp !== null
+        ? sample.vehicleTimestamp - previous.vehicleTimestamp
+        : null;
+    if (vehicleTimeDeltaSeconds === null ||
+        vehicleTimeDeltaSeconds <= 0 ||
+        !previous.position ||
+        !sample.position ||
+        !sample.stopPosition) {
+      return false;
+    }
+
+    const bounds = shapePointBounds ??
+      getStopShapePointBounds(sample.trip, sample.stopIndex);
+    if (!bounds) return false;
+    const projection = projectPositionOnShape(
+      sample.trip,
+      sample.position,
+      bounds
+    );
+    const previousProjection = projectPositionOnShape(
+      sample.trip,
+      previous.position,
+      bounds
+    );
+    const stopProjection = projectPositionOnShape(
+      sample.trip,
+      sample.stopPosition,
+      {
+        minShapePointIndex: Math.max(0, bounds.stopPointIndex - 1),
+        maxShapePointIndex: bounds.stopPointIndex + 1
+      }
+    );
+    if (!projection ||
+        !previousProjection ||
+        !stopProjection ||
+        previousProjection.crossTrackMeters >
+          stopDistanceShapeProjectionToleranceMeters ||
+        projection.crossTrackMeters >
+          stopDistanceShapeProjectionToleranceMeters ||
+        stopProjection.crossTrackMeters >
+          stopDistanceShapeProjectionToleranceMeters ||
+        projection.shapeDistance < previousProjection.shapeDistance ||
+        (trigger === 'next-stop-change' &&
+         stopProjection.shapeDistance < projection.shapeDistance)) {
+      return false;
+    }
+
+    const stopIsAhead =
+      stopProjection.shapeDistance >= projection.shapeDistance;
+    const physicalStopDistanceMagnitude = stopIsAhead
+      ? measureShapeDistance(
+        sample.trip,
+        projection.shapeDistance,
+        stopProjection.shapeDistance
+      )
+      : measureShapeDistance(
+        sample.trip,
+        stopProjection.shapeDistance,
+        projection.shapeDistance
+      );
+    const physicalStopDistance = physicalStopDistanceMagnitude === null
+      ? null
+      : stopIsAhead
+        ? physicalStopDistanceMagnitude
+        : -physicalStopDistanceMagnitude;
+    const geometryMovementMeters = measureShapeDistance(
+      sample.trip,
+      previousProjection.shapeDistance,
+      projection.shapeDistance
+    );
+    const distanceToStopMeters = getPositionDistanceMeters(
+      sample.position,
+      sample.stopPosition
+    );
+    if (physicalStopDistance === null ||
+        !Number.isFinite(physicalStopDistance) ||
+        (trigger === 'next-stop-change' && physicalStopDistance < 0) ||
+        geometryMovementMeters === null ||
+        !Number.isFinite(geometryMovementMeters) ||
+        geometryMovementMeters < 0 ||
+        distanceToStopMeters === null ||
+        distanceToStopMeters >
+          Math.abs(physicalStopDistance) +
+            stopDistanceShapeProjectionToleranceMeters) {
+      return false;
+    }
+
+    if (trigger === 'next-stop-change' &&
+        physicalStopDistance <= gpsStopDistanceToleranceMeters) {
+      return false;
+    }
+
+    const geometryProgress = previous.progress + geometryMovementMeters;
+    const calculatedStopShapeDistance = geometryProgress + physicalStopDistance;
+    const chainageOffset =
+      sample.stopShapeDistance - calculatedStopShapeDistance;
+    const correctedStopDistance = physicalStopDistance + chainageOffset;
+    if (!Number.isFinite(correctedStopDistance) ||
+        correctedStopDistance < 0) {
+      return false;
+    }
+
+    const reportedStopDistance = sample.reportedStopDistance;
+    sample.nextStopDistanceCorrectionPending = false;
+    sample.nextStopDistanceCorrectionApplied = true;
+    sample.nextStopDistanceCorrectionRawStopDistance =
+      sample.feedReportedStopDistance;
+    setReportedStopDistance(sample, correctedStopDistance);
+    if (trigger === 'next-stop-change') {
+      state.gpsBasedZeroStopDistanceCorrection = {
+        tripId: sample.tripId,
+        stopIndex: sample.stopIndex,
+        stopId: sample.stopId,
+        startedAt: sample.source,
+        shapeLegsValid,
+        shapePointBounds: bounds
+      };
+    }
+    this.onGpsBasedNextStopZeroCorrection({
+      trigger,
+      vehicleId: sample.vehicleId,
+      vehicleName: sample.vehicleName,
+      entityId: sample.entityId,
+      tripId: sample.tripId,
+      previous,
+      current: sample,
+      reportedStopDistance,
+      correctedStopDistance,
+      physicalStopDistance,
+      calculatedStopShapeDistance,
+      chainageOffset,
+      geometryMovementMeters,
+      geometryProgress,
+      vehicleTimeDeltaSeconds,
+      projection,
+      previousProjection,
+      stopProjection,
+      distanceToStopMeters,
+      shapeLegsValid,
+      correctionStartedAt:
+        state.gpsBasedZeroStopDistanceCorrection?.startedAt ?? sample.source,
+      correctionOriginShapeLegsValid:
+        state.gpsBasedZeroStopDistanceCorrection?.shapeLegsValid ??
+        shapeLegsValid
+    });
+    return true;
   }
 
   correctShortIntervalStopDistance(state, sample, projectPositionOnShape) {
@@ -1214,6 +1502,11 @@ export class SpeedGraphBuilder {
     this.stopSequenceRegressionRejectedFeeds++;
     this.rejectedSamples++;
     this.rejectedVehicleObservations++;
+    this.onFeedDisposition({
+      kind: 'rejected',
+      reason: 'stop-sequence-regression',
+      sample
+    });
     state.lastFeedSample = sample;
   }
 
@@ -1780,10 +2073,22 @@ export class SpeedGraphBuilder {
     const elapsedSeconds = sample.timestamp - previous.timestamp;
     if (elapsedSeconds <= 0) {
       this.rejectedFeedPairs++;
+      this.onFeedDisposition({
+        kind: 'pair-rejected',
+        reason: 'non-positive-elapsed-time',
+        sample,
+        previous
+      });
       return false;
     }
     if (sample.progress < previous.progress) {
       this.rejectedFeedPairs++;
+      this.onFeedDisposition({
+        kind: 'pair-rejected',
+        reason: 'backward-progress',
+        sample,
+        previous
+      });
       return false;
     }
 
@@ -1812,6 +2117,12 @@ export class SpeedGraphBuilder {
     if (rejectForStuckSensor) {
       this.rejectedFeedPairs++;
       this.doorSensorRejectedFeedPairs++;
+      this.onFeedDisposition({
+        kind: 'pair-rejected',
+        reason: 'stuck-door-sensor',
+        sample,
+        previous
+      });
       this.finalizeNonStoppingWindows(state, sample.timestamp);
       return true;
     }
@@ -1925,6 +2236,7 @@ export class SpeedGraphBuilder {
         previous: {
           source: previous.source,
           timestamp: previous.timestamp,
+          position: previous.position,
           doorOpen: previous.doorOpen,
           reportedStopDistance: previous.reportedStopDistance,
           progress: previous.progress,
@@ -1933,6 +2245,7 @@ export class SpeedGraphBuilder {
         current: {
           source: current.source,
           timestamp: current.timestamp,
+          position: current.position,
           doorOpen: current.doorOpen,
           reportedStopDistance: current.reportedStopDistance,
           progress: current.progress,
