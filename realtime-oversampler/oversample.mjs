@@ -330,7 +330,11 @@ function formatNextStopDistanceCorrection(incident) {
   const vehicleName = incident.vehicleName || '<missing>';
   const trigger = incident.trigger === 'next-stop-change'
     ? 'next stop changed'
-    : 'follow-up within five seconds of next-stop change';
+    : incident.trigger === 'continued-after-next-stop-change'
+      ? 'persistent correction after next-stop change'
+      : incident.trigger === 'resumed-after-next-stop-change'
+        ? 'resumed correction after next-stop change'
+        : 'follow-up within five seconds of next-stop change';
   return (
     `Next-stop stop_distance recalculated: vehicle id=${vehicleId}, ` +
     `name=${vehicleName}` +

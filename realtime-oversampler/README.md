@@ -65,8 +65,11 @@ Before graph calculations, the builder stages up to (**12**) feeds per vehicle i
 * Logged as "Delayed stop_distance update detected".
 
 ### 4. Next-Stop `stop_distance` Recalculation (`speed-graph.mjs`)
-* Delayed `stop_distance` can also occur when the feed's "next stop" changes so the 
+* Delayed `stop_distance` updates can also occur when a feed's "next stop" changes, leaving the reported `stop_distance` based on the previous feed's location.
 * Managed by `correctNextStopDistance` to rebase stop distance when a trip's next stop changes while doors remain closed.
+* If this recalculation differs from the reported value by more than 50 m, the correction remains active for later feeds, including updates more than five seconds apart and feeds received while doors are open. An active correction also carries across a forward next-stop change when the intervening shape legs are valid, using the prior corrected distance, shape-distance delta, and GPS movement to rebase the new stop pair. A report within 20 m is accepted for that feed but does not clear the correction; it is cleared when the trip changes or the next-stop transition cannot be validated.
+* If the corrected `stop_distance` differs from the reported value by 50 m or less, the correction is held unapplied during a two distinct feed grace window. A later same-stop report confirms the correction if it differs from the predicted trajectory by more than 50 m, or if valid GPS shape projections place every candidate correction within 20 m while at least one raw report is farther away. On confirmation, all buffered grace-window samples are recalculated together; otherwise, the candidates are discarded when the window expires and reported distances remain unchanged.
+* Feeds awaiting staged processing while a stop-sequence regression is confirmed or quarantined defer correction. After recovery, accepted feeds replay corrections in order from the last accepted feed, with a one-feed lookahead so corrections that revise the predecessor run before it is committed; rejected feeds never become correction anchors.
 * Logged as "Next-stop stop_distance recalculated".
 
 ### 5. Short-Interval `stop_distance` Recalculation (`speed-graph.mjs`)
@@ -76,8 +79,10 @@ Before graph calculations, the builder stages up to (**12**) feeds per vehicle i
 
 ### 6. Early Zero `stop_distance` Correction (`speed-graph.mjs`)
 * The feed provider may report zero `stop_distance` before the vehicle actually reaching the stop. This could happen from snapping or the vehicle opening its doors before the stop due to being unable to pull into the stop. False `stop_distance=0` values lead to incorrect speed calculations so they have to be corrected.
-* Positive-to-zero `stop_distance` transitions (regardless of implied speed) treated as near-stop snaps if GPS fixes are within **100 m** of the scheduled stop and closure agrees with GPS displacement within **10 m or 20%**. 
+* Positive-to-zero `stop_distance` transitions (regardless of implied speed) treated as near-stop snaps if GPS fixes are within **100 m** of the scheduled stop and closure agrees with GPS displacement within **10 m or 20%**.
+* On corrections, preceding feeds are also corrected when they have the same same vehicle timestamp and location.
 * **Open-Door Zero Distance Handling**: Managed by `correctDoorOpenStopDistance` to correct zero reported distances using GPS-to-stop proximity checks and candidate speed thresholds. Logged as "Early door_open zero stop_distance corrected".
+* The open-door correction does not overwrite a preceding feed already recalculated by correction #4; correction #4 continues through door-open feeds for the same next stop.
 * **Closed-Door Zero Distance Snaps**: Managed by `correctClosedDoorStopDistanceSnap` to correct positive-to-zero distance drops when GPS fixes are within range and closure agrees with movement. Logged as "Closed-door zero stop_distance snap corrected".
 
 ### 7. Backward Stop Sequence Quarantine (`speed-graph.mjs`)
