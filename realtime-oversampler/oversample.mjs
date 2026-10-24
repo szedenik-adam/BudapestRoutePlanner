@@ -289,6 +289,11 @@ function formatDoorOpenStopDistanceCorrection(incident) {
     `  Corrected ${correctedFeed} stop_distance ` +
     `${incident.reportedStopDistance.toFixed(1)} -> ` +
     `${incident.correctedStopDistance.toFixed(1)} m using ${correctionBasis}` +
+    `${incident.correctedHistoryFeedCount
+      ? `; back-corrected ${incident.correctedHistoryFeedCount} pending ` +
+        `feeds across ${incident.distinctHistoryObservationCount} distinct ` +
+        `GPS observations`
+      : ''}` +
     `${incident.candidateSpeedMps === null
       ? ''
       : `\n  Candidate adjusted progress speed ` +
@@ -300,6 +305,29 @@ function formatDoorOpenStopDistanceCorrection(incident) {
 function formatClosedDoorStopDistanceCorrection(incident) {
   const vehicleId = incident.vehicleId || '<missing>';
   const vehicleName = incident.vehicleName || '<missing>';
+  if (incident.correctionBasis === 'shape-projection') {
+    return (
+      `Closed-door zero stop_distance recalculated from shape: ` +
+      `vehicle id=${vehicleId}, name=${vehicleName}` +
+      `${incident.entityId ? `, entity=${incident.entityId}` : ''}, ` +
+      `trip=${incident.tripId}, route=${incident.routeName || '<unknown>'}\n` +
+      `  Previous feed: ${formatFeedSource(incident.previous.source)}; ` +
+      `vehicle time ${formatTimestamp(incident.previous.vehicleTimestamp)}; ` +
+      `stop_distance ${incident.reportedPreviousStopDistance.toFixed(1)} m ` +
+      `matches shape estimate ` +
+      `${incident.previousShapeStopDistance.toFixed(1)} m and is unchanged\n` +
+      `  Current feed: ${formatFeedSource(incident.current.source)}; ` +
+      `vehicle time ${formatTimestamp(incident.current.vehicleTimestamp)}; ` +
+      `stop_distance ${incident.reportedStopDistance.toFixed(1)} -> ` +
+      `${incident.correctedStopDistance.toFixed(1)} m; shape estimate ` +
+      `${incident.currentShapeStopDistance.toFixed(1)} m\n` +
+      `  GPS moved ${incident.gpsMovementMeters.toFixed(1)} m and shape ` +
+      `distance decreased ${incident.shapeMovementMeters.toFixed(1)} m ` +
+      `in ${incident.vehicleTimeDeltaSeconds} s; candidate speed ` +
+      `${incident.candidateSpeedMps.toFixed(1)} m/s corrected to ` +
+      `${incident.correctedSpeedMps.toFixed(1)} m/s`
+    );
+  }
   return (
     `Closed-door zero stop_distance snap corrected: ` +
     `vehicle id=${vehicleId}, name=${vehicleName}` +
@@ -403,6 +431,32 @@ function formatGpsBasedNextStopZeroCorrection(incident) {
 }
 
 function formatShortIntervalStopDistanceCorrection(incident) {
+  if (incident.downstreamStopCorrection) {
+    const confirmationFeeds = incident.confirmationSamples
+      .map((sample) => formatFeedSource(sample.source))
+      .join(' and ');
+    return (
+      `Short-interval stop_distance reconciled using downstream stop geometry: ` +
+      `vehicle id=${incident.vehicleId || '<missing>'}, ` +
+      `name=${incident.vehicleName || '<missing>'}` +
+      `${incident.entityId ? `, entity=${incident.entityId}` : ''}, ` +
+      `trip=${incident.tripId}\n` +
+      `  Previous feed: ${formatFeedSource(incident.previous.source)}; ` +
+      `stop ${incident.previous.feedStopId}; stop_distance ` +
+      `${incident.previousReportedStopDistance.toFixed(1)} -> ` +
+      `${incident.previous.reportedStopDistance.toFixed(1)} m\n` +
+      `  Current feed: ${formatFeedSource(incident.current.source)}; ` +
+      `stop ${incident.current.feedStopId}; stop_distance ` +
+      `${incident.currentReportedStopDistance.toFixed(1)} -> ` +
+      `${incident.current.reportedStopDistance.toFixed(1)} m\n` +
+      `  Rebased to downstream stop ${incident.targetStopId} ` +
+      `(index ${incident.targetStopIndex}); GPS trajectory confirmed by ` +
+      `${confirmationFeeds}; shape errors ` +
+      `${incident.previousShapeError.toFixed(1)} / ` +
+      `${incident.currentShapeError.toFixed(1)} m`
+    );
+  }
+
   const earlierCorrection = incident.earlierCorrection
     ? `\n  Earlier repeated feed: ` +
       `${formatFeedSource(incident.earlierCorrection.sample.source)}; ` +
@@ -417,6 +471,10 @@ function formatShortIntervalStopDistanceCorrection(incident) {
       `prior error ${incident.earlierCorrection.shapeError.toFixed(1)} m, ` +
       `${incident.earlierCorrection.crossTrackMeters.toFixed(1)} m from shape)`
     : '';
+  const currentStopDistance = incident.currentDistanceRecalculated
+    ? `${incident.currentReportedStopDistance.toFixed(1)} -> ` +
+      `${incident.current.reportedStopDistance.toFixed(1)} m`
+    : `${incident.current.reportedStopDistance.toFixed(1)} m`;
   return (
     `Short-interval stop_distance reconciled: vehicle id=${incident.vehicleId || '<missing>'}, ` +
     `name=${incident.vehicleName || '<missing>'}` +
@@ -433,12 +491,40 @@ function formatShortIntervalStopDistanceCorrection(incident) {
     `  Current feed: ${formatFeedSource(incident.current.source)}; ` +
     `vehicle time ${formatTimestamp(incident.current.vehicleTimestamp)}; ` +
     `GPS ${formatGpsPosition(incident.current.position)}; stop_distance ` +
-    `${incident.current.reportedStopDistance.toFixed(1)} m ` +
+    `${currentStopDistance} ` +
     `(shape estimate ${incident.currentExpectedStopDistance.toFixed(1)} m, ` +
     `error ${incident.currentShapeError.toFixed(1)} m, ` +
     `${incident.currentCrossTrackMeters.toFixed(1)} m from shape); ` +
     `vehicle time delta ${incident.vehicleTimeDeltaSeconds} s` +
     earlierCorrection
+  );
+}
+
+function formatRepeatedStaleStopDistanceCorrection(incident) {
+  const staleFeeds = incident.staleSamples
+    .map((correction) => formatFeedSource(correction.sample.source))
+    .join(' and ');
+  const rawStopDistance = incident.staleSamples[0].reportedStopDistance;
+  return (
+    `Repeated stale stop_distance corrected after a persistent update: ` +
+    `vehicle id=${incident.vehicleId || '<missing>'}, ` +
+    `name=${incident.vehicleName || '<missing>'}` +
+    `${incident.entityId ? `, entity=${incident.entityId}` : ''}, ` +
+    `trip=${incident.tripId}\n` +
+    `  Repeated stale feeds: ${staleFeeds}; stop_distance ` +
+    `${rawStopDistance.toFixed(1)} -> ` +
+    `${incident.correctedStopDistance.toFixed(1)} m; ` +
+    `GPS-to-stop ${incident.staleDistanceToStop.toFixed(1)} m\n` +
+    `  First updated feed: ` +
+    `${formatFeedSource(incident.freshSample.source)}; stop_distance ` +
+    `${incident.freshSample.reportedStopDistance.toFixed(1)} m; ` +
+    `GPS-to-stop ${incident.freshDistanceToStop.toFixed(1)} m; GPS movement ` +
+    `${incident.gpsMovementMeters.toFixed(1)} m\n` +
+    `  Confirmed by ${formatFeedSource(incident.confirmationSample.source)}; ` +
+    `stop_distance ` +
+    `${incident.confirmationSample.reportedStopDistance.toFixed(1)} m; ` +
+    `GPS-to-stop ` +
+    `${incident.confirmationDistanceToStop.toFixed(1)} m`
   );
 }
 
@@ -477,6 +563,23 @@ function formatStopSequenceFeed(label, sample) {
     `stop_distance ${sample.reportedStopDistance.toFixed(1)} m; ` +
     `shape_dist_traveled ${sample.stopShapeDistance.toFixed(1)} m; ` +
     `progress ${sample.progress.toFixed(1)} m`
+  );
+}
+
+function formatPersistentZeroStopDistanceCorrection(incident) {
+  return (
+    `Persistent shape-based stop_distance correction: ` +
+    `vehicle id=${incident.vehicleId || '<missing>'}, ` +
+    `name=${incident.vehicleName || '<missing>'}` +
+    `${incident.entityId ? `, entity=${incident.entityId}` : ''}, ` +
+    `trip=${incident.tripId}, route=${incident.routeName || '<unknown>'}\n` +
+    `  Correction started at ${formatFeedSource(incident.startedAt)}; ` +
+    `current feed ${formatFeedSource(incident.current.source)}; ` +
+    `vehicle time ${formatTimestamp(incident.current.vehicleTimestamp)}\n` +
+    `  stop_distance ${incident.reportedStopDistance.toFixed(1)} -> ` +
+    `${incident.correctedStopDistance.toFixed(1)} m from valid shape ` +
+    `projection (difference ` +
+    `${incident.correctionDifferenceMeters.toFixed(1)} m)`
   );
 }
 
@@ -802,12 +905,16 @@ export async function main(args = process.argv.slice(2)) {
       status.log(formatGpsBasedNextStopZeroCorrection(incident)),
     onShortIntervalStopDistanceCorrection: (incident) =>
       status.log(formatShortIntervalStopDistanceCorrection(incident)),
+    onRepeatedStaleStopDistanceCorrection: (incident) =>
+      status.log(formatRepeatedStaleStopDistanceCorrection(incident)),
     onShortIntervalStopDistanceCorrectionRejected: (incident) =>
       status.log(formatShortIntervalStopDistanceCorrectionRejection(incident)),
     onDoorOpenStopDistanceCorrection: (incident) =>
       status.log(formatDoorOpenStopDistanceCorrection(incident)),
     onClosedDoorStopDistanceCorrection: (incident) =>
       status.log(formatClosedDoorStopDistanceCorrection(incident)),
+    onPersistentZeroStopDistanceCorrection: (incident) =>
+      status.log(formatPersistentZeroStopDistanceCorrection(incident)),
     onStopSequenceRegression: (incident) =>
       status.log(formatStopSequenceRegression(incident)),
     onGpsDriftRejection: (incident) =>

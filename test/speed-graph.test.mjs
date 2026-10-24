@@ -1057,7 +1057,7 @@ test('also reconciles one earlier feed in the same repeated stale-distance run',
   );
 });
 
-test('reconciles at four seconds but not at the exclusive 4.5-second boundary or without evidence', () => {
+test('reconciles shape-confirmed candidates through the extended interval but not without evidence', () => {
   for (const {
     timestampDelta,
     doorOpen,
@@ -1077,7 +1077,7 @@ test('reconciles at four seconds but not at the exclusive 4.5-second boundary or
       doorOpen: false,
       currentPosition: { latitude: 0, longitude: 0.0005 },
       flushPrevious: false,
-      expectedCorrectionCount: 0
+      expectedCorrectionCount: 1
     },
     {
       timestampDelta: 1,
@@ -1130,6 +1130,312 @@ test('reconciles at four seconds but not at the exclusive 4.5-second boundary or
   }
 });
 
+test('reconciles a stale previous stop_distance across six seconds with shape evidence', () => {
+  const corrections = [];
+  const outliers = [];
+  const builder = createBuilder({
+    onShortIntervalStopDistanceCorrection: (incident) =>
+      corrections.push(incident),
+    onSpeedOutlier: (incident) => outliers.push(incident)
+  });
+  const timetable = createTimetable();
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1000,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 400,
+    position: { latitude: 0, longitude: 0.0004 }
+  })), timetable);
+  const state = builder.vehicleStates.get('vehicle');
+  const previous = state.lastFeedSample;
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1006,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 56,
+    position: { latitude: 0, longitude: 0.0005 }
+  })), timetable);
+
+  assert.equal(corrections.length, 1);
+  assert.equal(corrections[0].previous, previous);
+  assert.equal(corrections[0].vehicleTimeDeltaSeconds, 6);
+  assert.ok(previous.reportedStopDistance > 65);
+  assert.ok(previous.reportedStopDistance < 70);
+  assert.ok(corrections[0].previousShapeError > 300);
+  assert.ok(corrections[0].currentShapeError < 20);
+  assert.ok(previous.progress < state.lastFeedSample.progress);
+
+  builder.flushPendingStationaryFeeds();
+  assert.equal(outliers.length, 0);
+});
+
+test('recalculates both stop distances when same-leg reports share a shape offset', () => {
+  const corrections = [];
+  const outliers = [];
+  const builder = createBuilder({
+    onShortIntervalStopDistanceCorrection: (incident) =>
+      corrections.push(incident),
+    onSpeedOutlier: (incident) => outliers.push(incident)
+  });
+  const timetable = createTimetable();
+  const previousPosition = { latitude: 0, longitude: 0.0004 };
+  const currentPosition = { latitude: 0, longitude: 0.0005 };
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1000,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 200,
+    position: previousPosition
+  })), timetable);
+  const previous = builder.vehicleStates.get('vehicle').lastFeedSample;
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1001,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 120,
+    position: currentPosition
+  })), timetable);
+
+  assert.equal(corrections.length, 1);
+  assert.equal(corrections[0].previous, previous);
+  assert.equal(corrections[0].currentDistanceRecalculated, true);
+  assert.equal(corrections[0].currentReportedStopDistance, 120);
+  assert.ok(Math.abs(previous.reportedStopDistance - 66.7) < 1);
+  assert.ok(
+    Math.abs(
+      corrections[0].current.reportedStopDistance - 55.6
+    ) < 1
+  );
+  assert.equal(previous.stopDistanceCorrectionRawValue, 200);
+  assert.equal(
+    corrections[0].current.stopDistanceCorrectionRawValue,
+    120
+  );
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1001,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 120,
+    position: currentPosition
+  })), timetable);
+  assert.ok(
+    Math.abs(
+      builder.vehicleStates.get('vehicle').lastFeedSample.reportedStopDistance -
+        55.6
+    ) < 1
+  );
+
+  builder.flushPendingStationaryFeeds();
+  assert.equal(outliers.length, 0);
+});
+
+test('corrects repeated stale stop_distance only after a GPS-consistent update persists', () => {
+  const corrections = [];
+  const builder = createBuilder({
+    onRepeatedStaleStopDistanceCorrection: (incident) =>
+      corrections.push(incident)
+  });
+  const timetable = createTimetable({
+    stopCoordinates: [[0, 0], [0.0015, 0], [0.002, 0]]
+  });
+  const stalePosition = { latitude: 0, longitude: 0.0003 };
+  const freshPosition = { latitude: 0, longitude: 0.0006 };
+  const confirmationPosition = { latitude: 0, longitude: 0.0007 };
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1000,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 300,
+    position: stalePosition
+  })), timetable);
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1000,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 300,
+    position: stalePosition
+  })), timetable);
+  const state = builder.vehicleStates.get('vehicle');
+  const staleSamples = state.pendingStationaryFeeds.samples
+    .map((entry) => entry.sample);
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1006,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 100,
+    position: freshPosition
+  })), timetable);
+  assert.equal(corrections.length, 0);
+  assert.equal(staleSamples[0].reportedStopDistance, 300);
+  assert.equal(staleSamples[1].reportedStopDistance, 300);
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1012,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 89,
+    position: confirmationPosition
+  })), timetable);
+
+  assert.equal(corrections.length, 1);
+  assert.deepEqual(
+    corrections[0].staleSamples.map((correction) => correction.sample),
+    staleSamples.slice(0, 2)
+  );
+  assert.ok(
+    Math.abs(staleSamples[0].reportedStopDistance - 133.4) < 1
+  );
+  assert.equal(
+    staleSamples[0].reportedStopDistance,
+    staleSamples[1].reportedStopDistance
+  );
+  assert.equal(staleSamples[0].stopDistanceCorrectionRawValue, 300);
+  assert.equal(state.lastFeedSample.feedReportedStopDistance, 89);
+  assert.equal(state.lastFeedSample.reportedStopDistance, 89);
+  const freshEntry = state.pendingStationaryFeeds.samples.find(
+    (entry) => entry.sample === corrections[0].freshSample
+  );
+  assert.equal(
+    freshEntry.progressDeltaMeters,
+    freshEntry.sample.progress - freshEntry.previousSample.progress
+  );
+});
+
+test('does not correct repeated stale feeds without a confirmed GPS-consistent report', () => {
+  for (const confirmation of [
+    null,
+    {
+      timestamp: 1012,
+      stopDistance: 10,
+      position: { latitude: 0, longitude: 0.0007 }
+    },
+    {
+      timestamp: 1012,
+      stopDistance: 100,
+      position: { latitude: 0, longitude: 0.0006 }
+    }
+  ]) {
+    const corrections = [];
+    const builder = createBuilder({
+      onRepeatedStaleStopDistanceCorrection: (incident) =>
+        corrections.push(incident)
+    });
+    const timetable = createTimetable({
+      stopCoordinates: [[0, 0], [0.0015, 0], [0.002, 0]]
+    });
+    const stalePosition = { latitude: 0, longitude: 0.0003 };
+    builder.processFeed(feed(vehicleEntity({
+      timestamp: 1000,
+      sequence: 2,
+      stopId: 'B',
+      stopDistance: 300,
+      position: stalePosition
+    })), timetable);
+    builder.processFeed(feed(vehicleEntity({
+      timestamp: 1000,
+      sequence: 2,
+      stopId: 'B',
+      stopDistance: 300,
+      position: stalePosition
+    })), timetable);
+    builder.processFeed(feed(vehicleEntity({
+      timestamp: 1006,
+      sequence: 2,
+      stopId: 'B',
+      stopDistance: 100,
+      position: { latitude: 0, longitude: 0.0006 }
+    })), timetable);
+    const staleSamples = builder.vehicleStates.get('vehicle')
+      .pendingStationaryFeeds.samples
+      .slice(0, 2)
+      .map((entry) => entry.sample);
+
+    if (confirmation) {
+      builder.processFeed(feed(vehicleEntity({
+        timestamp: confirmation.timestamp,
+        sequence: 2,
+        stopId: 'B',
+        stopDistance: confirmation.stopDistance,
+        position: confirmation.position
+      })), timetable);
+    }
+
+    assert.equal(corrections.length, 0);
+    assert.deepEqual(
+      staleSamples.map((sample) => sample.reportedStopDistance),
+      [300, 300]
+    );
+  }
+});
+
+test('keeps shape-confirmed stop-distance reconciliation bounded to eight seconds', () => {
+  const corrections = [];
+  const rejections = [];
+  const builder = createBuilder({
+    onShortIntervalStopDistanceCorrection: (incident) =>
+      corrections.push(incident),
+    onShortIntervalStopDistanceCorrectionRejected: (incident) =>
+      rejections.push(incident)
+  });
+  const timetable = createTimetable();
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1000,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 400,
+    position: { latitude: 0, longitude: 0.0004 }
+  })), timetable);
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1008,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 56,
+    position: { latitude: 0, longitude: 0.0005 }
+  })), timetable);
+
+  assert.equal(corrections.length, 0);
+  assert.equal(rejections.length, 1);
+  assert.equal(rejections[0].candidateSpeedMps, 43);
+  assert.equal(rejections[0].rejectionReason, 'interval-outside-window');
+});
+
+test('rejects an extended-interval correction when the current distance disagrees with GPS', () => {
+  const corrections = [];
+  const rejections = [];
+  const builder = createBuilder({
+    onShortIntervalStopDistanceCorrection: (incident) =>
+      corrections.push(incident),
+    onShortIntervalStopDistanceCorrectionRejected: (incident) =>
+      rejections.push(incident)
+  });
+  const timetable = createTimetable();
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1000,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 400,
+    position: { latitude: 0, longitude: 0.0004 }
+  })), timetable);
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1006,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 10,
+    position: { latitude: 0, longitude: 0.0005 }
+  })), timetable);
+
+  assert.equal(corrections.length, 0);
+  assert.equal(rejections.length, 1);
+  assert.equal(rejections[0].rejectionReason, 'current-shape-error-too-large');
+  assert.ok(rejections[0].currentShapeError > 20);
+});
+
 test('reports the failed gate for an outlier-sized short-interval stop-distance candidate', () => {
   const rejections = [];
   const builder = createBuilder({
@@ -1160,6 +1466,167 @@ test('reports the failed gate for an outlier-sized short-interval stop-distance 
   assert.equal(rejections[0].rejectionReason, 'current-shape-error-too-large');
   assert.equal(rejections[0].candidateSpeedMps, 110);
   assert.ok(rejections[0].currentShapeError > 20);
+});
+
+test('confirms a downstream-leg correction before rebasing stale stop metadata', () => {
+  const corrections = [];
+  const rejections = [];
+  const builder = createBuilder({
+    onShortIntervalStopDistanceCorrection: (incident) =>
+      corrections.push(incident),
+    onShortIntervalStopDistanceCorrectionRejected: (incident) =>
+      rejections.push(incident)
+  });
+  const timetable = createTimetable({
+    stopShapeDist: [0, 111.2, 222.4, 333.6],
+    shapePoints: [
+      [0, 0, 0],
+      [111.2, 0.001, 0],
+      [222.4, 0.001, 0.001],
+      [333.6, 0.002, 0.001]
+    ],
+    stopCoordinates: [
+      [0, 0],
+      [0.001, 0],
+      [0.001, 0.001],
+      [0.002, 0.001]
+    ]
+  });
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1000,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 78,
+    position: { latitude: 0.0003, longitude: 0.001 }
+  })), timetable);
+  const state = builder.vehicleStates.get('vehicle');
+  const previous = state.lastFeedSample;
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1001,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 12,
+    position: { latitude: 0.0004, longitude: 0.001 }
+  })), timetable);
+
+  const candidate = state.lastFeedSample;
+  assert.equal(previous.reportedStopDistance, 78);
+  assert.equal(candidate.reportedStopDistance, 12);
+  assert.equal(state.pendingDownstreamStopDistanceCorrection.current, candidate);
+  assert.equal(corrections.length, 0);
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1001,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 12,
+    position: { latitude: 0.0004, longitude: 0.001 }
+  })), timetable);
+  assert.equal(corrections.length, 0);
+  assert.equal(state.pendingDownstreamStopDistanceCorrection.current, candidate);
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1002,
+    sequence: 3,
+    stopId: 'C',
+    stopDistance: 56,
+    position: { latitude: 0.0005, longitude: 0.001 }
+  })), timetable);
+  assert.equal(corrections.length, 0);
+  assert.equal(state.pendingDownstreamStopDistanceCorrection.current, candidate);
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1003,
+    sequence: 3,
+    stopId: 'C',
+    stopDistance: 45,
+    position: { latitude: 0.0006, longitude: 0.001 }
+  })), timetable);
+
+  assert.equal(state.pendingDownstreamStopDistanceCorrection, null);
+  assert.equal(corrections.length, 1);
+  assert.equal(corrections[0].downstreamStopCorrection, true);
+  assert.equal(corrections[0].targetStopId, 'C');
+  assert.equal(previous.stopIndex, 2);
+  assert.equal(candidate.stopIndex, 2);
+  assert.equal(previous.stopId, 'C');
+  assert.equal(candidate.stopId, 'C');
+  assert.ok(previous.reportedStopDistance > 75);
+  assert.ok(previous.reportedStopDistance < 80);
+  assert.ok(candidate.reportedStopDistance > 64);
+  assert.ok(candidate.reportedStopDistance < 69);
+  assert.ok(candidate.progress > previous.progress);
+  assert.ok(candidate.progress - previous.progress < 12);
+  assert.equal(rejections[0].rejectionReason,
+    'downstream-leg-correction-awaiting-confirmation');
+});
+
+test('discards a tentative downstream correction when GPS returns to the old leg', () => {
+  const corrections = [];
+  const rejections = [];
+  const builder = createBuilder({
+    onShortIntervalStopDistanceCorrection: (incident) =>
+      corrections.push(incident),
+    onShortIntervalStopDistanceCorrectionRejected: (incident) =>
+      rejections.push(incident)
+  });
+  const timetable = createTimetable({
+    stopShapeDist: [0, 111.2, 222.4, 333.6],
+    shapePoints: [
+      [0, 0, 0],
+      [111.2, 0.001, 0],
+      [222.4, 0.001, 0.001],
+      [333.6, 0.002, 0.001]
+    ],
+    stopCoordinates: [
+      [0, 0],
+      [0.001, 0],
+      [0.001, 0.001],
+      [0.002, 0.001]
+    ]
+  });
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1000,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 78,
+    position: { latitude: 0.0003, longitude: 0.001 }
+  })), timetable);
+  const state = builder.vehicleStates.get('vehicle');
+  const previous = state.lastFeedSample;
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1001,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 12,
+    position: { latitude: 0.0004, longitude: 0.001 }
+  })), timetable);
+  const candidate = state.lastFeedSample;
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1002,
+    sequence: 3,
+    stopId: 'C',
+    stopDistance: 56,
+    position: { latitude: 0.0006, longitude: 0.001 }
+  })), timetable);
+  assert.ok(state.pendingDownstreamStopDistanceCorrection);
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1003,
+    sequence: 3,
+    stopId: 'C',
+    stopDistance: 60,
+    position: { latitude: 0, longitude: 0.0005 }
+  })), timetable);
+
+  assert.equal(state.pendingDownstreamStopDistanceCorrection, null);
+  assert.equal(corrections.length, 0);
+  assert.equal(previous.reportedStopDistance, 78);
+  assert.equal(candidate.reportedStopDistance, 12);
+  assert.equal(
+    rejections.at(-1).rejectionReason,
+    'downstream-confirmation-off-shape'
+  );
 });
 
 test('reports when an outlier-sized stop-distance candidate is outside the correction window', () => {
@@ -1258,6 +1725,312 @@ test('corrects a closed-door near-stop zero snap using matching GPS movement', (
   assert.equal(state.lastSample.distanceToStop, incident.correctedStopDistance);
   assert.ok(state.recentSpeedTransitions[0].speedMps <= 35);
   assert.equal(outliers.length, 0);
+});
+
+test('preserves a shape-backed distance when a nearby route loop mimics a stop snap', () => {
+  const incidents = [];
+  const outliers = [];
+  const builder = createBuilder({
+    onClosedDoorStopDistanceCorrection: (incident) => incidents.push(incident),
+    onSpeedOutlier: (incident) => outliers.push(incident)
+  });
+  const positionAtMeters = (x, y = 0) => ({
+    latitude: 47.5 + y / 111320,
+    longitude: 19 + x / (111320 * Math.cos(47.5 * Math.PI / 180))
+  });
+  const shapePoint = (distance, x, y = 0) => {
+    const position = positionAtMeters(x, y);
+    return [distance, position.longitude, position.latitude];
+  };
+  const firstMovementMeters = Math.hypot(9.4, 52);
+  const loopSideMeters = 106.6;
+  const loopStartDistance = firstMovementMeters;
+  const timetable = createTimetable({
+    stopShapeDist: [0, 500],
+    shapePoints: [
+      shapePoint(0, -30, 52),
+      shapePoint(loopStartDistance, -20.6),
+      shapePoint(loopStartDistance + loopSideMeters, -20.6, loopSideMeters),
+      shapePoint(loopStartDistance + 2 * loopSideMeters, 86, loopSideMeters),
+      shapePoint(loopStartDistance + 3 * loopSideMeters, 86),
+      shapePoint(loopStartDistance + 4 * loopSideMeters, -20.6),
+      shapePoint(loopStartDistance + 4 * loopSideMeters + 16.5, -4.1),
+      shapePoint(loopStartDistance + 4 * loopSideMeters + 21, 0)
+    ],
+    stopCoordinates: [
+      [
+        positionAtMeters(-30, 52).longitude,
+        positionAtMeters(-30, 52).latitude
+      ],
+      [positionAtMeters(0).longitude, positionAtMeters(0).latitude]
+    ]
+  });
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1000,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 500,
+    position: positionAtMeters(-30, 52)
+  })), timetable);
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1010,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 0,
+    position: positionAtMeters(-20.6)
+  })), timetable);
+  const shapeCorrectedSample =
+    builder.vehicleStates.get('vehicle').lastFeedSample;
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1010,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 0,
+    position: positionAtMeters(-20.6)
+  })), timetable);
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1065,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 0,
+    position: positionAtMeters(-4.1)
+  })), timetable);
+  builder.flushPendingStationaryFeeds();
+
+  assert.equal(incidents.length, 1);
+  assert.equal(incidents[0].correctionBasis, 'shape-projection');
+  assert.ok(shapeCorrectedSample.reportedStopDistance > 400);
+  assert.equal(outliers.length, 0);
+  assert.ok(
+    builder.vehicleStates.get('vehicle').recentSpeedTransitions.every(
+      (transition) => transition.speedMps <= 35
+    )
+  );
+});
+
+test('keeps GPS-supported snap corrections for uncorrected positive reports', () => {
+  const incidents = [];
+  const outliers = [];
+  const builder = createBuilder({
+    onClosedDoorStopDistanceCorrection: (incident) => incidents.push(incident),
+    onSpeedOutlier: (incident) => outliers.push(incident)
+  });
+  const positionAtMeters = (x, y = 0) => ({
+    latitude: 47.5 + y / 111320,
+    longitude: 19 + x / (111320 * Math.cos(47.5 * Math.PI / 180))
+  });
+  const shapePoint = (distance, x, y = 0) => {
+    const position = positionAtMeters(x, y);
+    return [distance, position.longitude, position.latitude];
+  };
+  const timetable = createTimetable({
+    stopShapeDist: [0, 500],
+    shapePoints: [
+      shapePoint(0, -374.4),
+      shapePoint(345, -29.4),
+      shapePoint(357.4, -17),
+      shapePoint(397.4, -17, 40),
+      shapePoint(437.4, 23, 40),
+      shapePoint(477.4, 23),
+      shapePoint(500, 0)
+    ],
+    stopCoordinates: [
+      [
+        positionAtMeters(-374.4).longitude,
+        positionAtMeters(-374.4).latitude
+      ],
+      [positionAtMeters(0).longitude, positionAtMeters(0).latitude]
+    ]
+  });
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1000,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 155,
+    position: positionAtMeters(-29.4)
+  })), timetable);
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1003,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 0,
+    position: positionAtMeters(-17)
+  })), timetable);
+  builder.flushPendingStationaryFeeds();
+
+  assert.equal(incidents.length, 1);
+  assert.ok(incidents[0].correctedPreviousStopDistance > 25);
+  assert.ok(incidents[0].correctedPreviousStopDistance < 35);
+  assert.ok(incidents[0].correctedStopDistance > 10);
+  assert.ok(incidents[0].correctedStopDistance < 25);
+  assert.equal(outliers.length, 0);
+});
+
+test('corrects only a closed-door zero that conflicts with a matching shape projection', () => {
+  const incidents = [];
+  const builder = createBuilder({
+    onClosedDoorStopDistanceCorrection: (incident) => incidents.push(incident)
+  });
+  const timetable = createTimetable({
+    stopShapeDist: [0, 500],
+    shapePoints: [
+      [0, 19, 47.5],
+      [500, 19.0067, 47.5]
+    ],
+    stopCoordinates: [
+      [19, 47.5],
+      [19.0067, 47.5]
+    ]
+  });
+  const previous = vehicleEntity({
+    timestamp: 1000,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 462,
+    position: { latitude: 47.5, longitude: 19.00048 }
+  });
+  const current = vehicleEntity({
+    timestamp: 1009,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 0,
+    position: { latitude: 47.5, longitude: 19.0011 }
+  });
+
+  builder.processFeed(feed(previous), timetable);
+  builder.processFeed(feed(current), timetable);
+  builder.flushPendingStationaryFeeds();
+
+  const incident = incidents[0];
+  const state = builder.vehicleStates.get('vehicle');
+  assert.equal(incidents.length, 1);
+  assert.equal(incident.correctionBasis, 'shape-projection');
+  assert.equal(incident.reportedPreviousStopDistance, 462);
+  assert.equal(incident.correctedPreviousStopDistance, 462);
+  assert.equal(incident.previous.reportedStopDistance, 462);
+  assert.equal(incident.reportedStopDistance, 0);
+  assert.ok(
+    Math.abs(
+      incident.previousShapeStopDistance - 462
+    ) <= 20
+  );
+  assert.ok(incident.currentShapeStopDistance > 400);
+  assert.equal(
+    state.lastSample.reportedStopDistance,
+    incident.currentShapeStopDistance
+  );
+  assert.ok(state.recentSpeedTransitions[0].speedMps <= 35);
+});
+
+test('keeps a shape-based zero correction active until the reported distance matches shape', () => {
+  const continuedCorrections = [];
+  const builder = createBuilder({
+    onPersistentZeroStopDistanceCorrection: (incident) =>
+      continuedCorrections.push(incident)
+  });
+  const timetable = createTimetable({
+    stopShapeDist: [0, 500],
+    shapePoints: [
+      [0, 19, 47.5],
+      [500, 19.0067, 47.5]
+    ],
+    stopCoordinates: [
+      [19, 47.5],
+      [19.0067, 47.5]
+    ]
+  });
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1000,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 462,
+    position: { latitude: 47.5, longitude: 19.00048 }
+  })), timetable);
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1009,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 0,
+    position: { latitude: 47.5, longitude: 19.0011 }
+  })), timetable);
+
+  let state = builder.vehicleStates.get('vehicle');
+  assert.ok(state.persistentShapeZeroStopDistanceCorrection);
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1014,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 0,
+    doorOpen: true,
+    position: { latitude: 47.5, longitude: 19.0012 }
+  })), timetable);
+
+  state = builder.vehicleStates.get('vehicle');
+  assert.equal(state.lastFeedSample.feedReportedStopDistance, 0);
+  assert.ok(state.lastFeedSample.reportedStopDistance > 0);
+  assert.equal(continuedCorrections.length, 1);
+  assert.equal(continuedCorrections[0].reportedStopDistance, 0);
+  assert.equal(
+    state.lastFeedSample.reportedStopDistance,
+    continuedCorrections[0].correctedStopDistance
+  );
+  assert.ok(state.persistentShapeZeroStopDistanceCorrection);
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1020,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 180,
+    doorOpen: true,
+    position: { latitude: 47.5, longitude: 19.0043 }
+  })), timetable);
+
+  state = builder.vehicleStates.get('vehicle');
+  assert.equal(state.lastFeedSample.reportedStopDistance, 180);
+  assert.equal(state.persistentShapeZeroStopDistanceCorrection, null);
+  assert.equal(continuedCorrections.length, 1);
+});
+
+test('does not shape-correct a closed-door zero after a sub-200m report', () => {
+  const incidents = [];
+  const builder = createBuilder({
+    onClosedDoorStopDistanceCorrection: (incident) => incidents.push(incident)
+  });
+  const timetable = createTimetable({
+    stopShapeDist: [0, 190],
+    shapePoints: [
+      [0, 19, 47.5],
+      [190, 19.00255, 47.5]
+    ],
+    stopCoordinates: [
+      [19, 47.5],
+      [19.00255, 47.5]
+    ]
+  });
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1000,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 150,
+    position: { latitude: 47.5, longitude: 19.00054 }
+  })), timetable);
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1009,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 0,
+    position: { latitude: 47.5, longitude: 19.00116 }
+  })), timetable);
+  builder.flushPendingStationaryFeeds();
+
+  assert.equal(incidents.length, 0);
+  assert.equal(
+    builder.vehicleStates.get('vehicle').lastSample.reportedStopDistance,
+    0
+  );
 });
 
 test('reuses a stop-distance correction for an identical same-timestamp feed', () => {
@@ -1518,11 +2291,11 @@ test('does not apply next-stop distance corrections across open doors or at five
   }
 });
 
-test('uses full elapsed time for door-state transitions and halves sustained open-door intervals', () => {
+test('uses the full elapsed time for every door-state transition', () => {
   const cases = [
     { previousDoorOpen: false, currentDoorOpen: true, expectedSpeedMps: 2 },
     { previousDoorOpen: true, currentDoorOpen: false, expectedSpeedMps: 2 },
-    { previousDoorOpen: true, currentDoorOpen: true, expectedSpeedMps: 4 }
+    { previousDoorOpen: true, currentDoorOpen: true, expectedSpeedMps: 2 }
   ];
 
   for (const {
@@ -1610,6 +2383,76 @@ test('recalculates zero stop_distance on open-door feeds away from the stop', ()
         gpsMovementMeters / elapsedSeconds) < 0.1
     );
   }
+});
+
+test('uses the valid shape projection for a later open-door zero after a shape-confirmed closed-door feed', () => {
+  const incidents = [];
+  const builder = createBuilder({
+    onDoorOpenStopDistanceCorrection: (incident) => incidents.push(incident)
+  });
+  const longitudeAtMeters = (meters) =>
+    19 + meters / (111320 * Math.cos(47.5 * Math.PI / 180));
+  const latitudeAtMeters = (meters) => 47.5 + meters / 111320;
+  const routePoints = [
+    [0, 0, 0],
+    [120, 120, 0],
+    [240, 120, 120],
+    [360, 240, 120],
+    [600, 240, -120],
+    [802, 95, 20],
+    [972, 265, 20]
+  ];
+  const shapePoints = routePoints.map(([distance, x, y]) => [
+    distance,
+    longitudeAtMeters(x),
+    latitudeAtMeters(y)
+  ]);
+  const timetable = createTimetable({
+    stopShapeDist: [0, 972],
+    shapePoints,
+    stopCoordinates: [
+      [longitudeAtMeters(0), latitudeAtMeters(0)],
+      [longitudeAtMeters(265), latitudeAtMeters(20)]
+    ]
+  });
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1000,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 972,
+    position: {
+      latitude: latitudeAtMeters(0),
+      longitude: longitudeAtMeters(0)
+    }
+  })), timetable);
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1060,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 0,
+    doorOpen: true,
+    position: {
+      latitude: latitudeAtMeters(20),
+      longitude: longitudeAtMeters(95)
+    }
+  })), timetable);
+  builder.flushPendingStationaryFeeds();
+
+  const incident = incidents[0];
+  const state = builder.vehicleStates.get('vehicle');
+  assert.equal(incidents.length, 1);
+  assert.equal(
+    incident.correctionBasis,
+    'valid shape projection anchored by the previous closed-door stop_distance'
+  );
+  assert.equal(incident.reportedStopDistance, 0);
+  assert.equal(incident.previous.reportedStopDistance, 972);
+  assert.ok(incident.correctedStopDistance > 160);
+  assert.ok(incident.correctedStopDistance < 180);
+  assert.equal(
+    state.lastSample.reportedStopDistance,
+    incident.correctedStopDistance
+  );
 });
 
 test('trusts door-open zero stop_distance within 50m of the stop', () => {
@@ -1929,6 +2772,7 @@ test('corrects repeated lagging feeds on a near-stop door-open zero transition',
   const state = builder.vehicleStates.get('vehicle');
   assert.equal(incidents.length, 1);
   assert.equal(incidents[0].correctedTarget, 'previous');
+  assert.equal(incidents[0].correctedHistoryFeedCount, 0);
   const previousDistanceToStopMeters =
     incidents[0].previousDistanceToStopMeters;
   assert.equal(incidents[0].reportedStopDistance, 246);
@@ -1946,6 +2790,133 @@ test('corrects repeated lagging feeds on a near-stop door-open zero transition',
   );
   assert.ok(state.recentSpeedTransitions[0].speedMps < 35);
   assert.equal(outliers.length, 0);
+});
+
+test('corrects a consistent lagging stop_distance history back to shape projections', () => {
+  const incidents = [];
+  const outliers = [];
+  const builder = createBuilder({
+    onDoorOpenStopDistanceCorrection: (incident) => incidents.push(incident),
+    onSpeedOutlier: (incident) => outliers.push(incident)
+  });
+  const latitude = 47.5;
+  const longitudeAtMeters = (meters) =>
+    19 + meters / (111320 * Math.cos(latitude * Math.PI / 180));
+  const positionAtMeters = (meters) => ({
+    latitude,
+    longitude: longitudeAtMeters(meters)
+  });
+  const timetable = createTimetable({
+    shapePoints: [
+      [0, longitudeAtMeters(0), latitude],
+      [100, longitudeAtMeters(100), latitude],
+      [200, longitudeAtMeters(200), latitude]
+    ],
+    stopCoordinates: [
+      [longitudeAtMeters(0), latitude],
+      [longitudeAtMeters(100), latitude],
+      [longitudeAtMeters(200), latitude]
+    ]
+  });
+  const history = [];
+  for (const [timestamp, position, stopDistance] of [
+    [1000, 40, 140],
+    [1005, 55, 125],
+    [1010, 70, 110]
+  ]) {
+    builder.processFeed(feed(vehicleEntity({
+      timestamp,
+      sequence: 2,
+      stopId: 'B',
+      stopDistance,
+      position: positionAtMeters(position)
+    })), timetable);
+    history.push(builder.vehicleStates.get('vehicle').lastFeedSample);
+  }
+
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1015,
+    sequence: 2,
+    stopId: 'B',
+    stopDistance: 0,
+    doorOpen: true,
+    currentStatus: 1,
+    position: positionAtMeters(95)
+  })), timetable);
+  builder.flushPendingStationaryFeeds();
+
+  const incident = incidents[0];
+  const state = builder.vehicleStates.get('vehicle');
+  assert.equal(incidents.length, 1);
+  assert.equal(
+    incident.correctionBasis,
+    'consistent same-stop history with valid shape projections'
+  );
+  assert.equal(incident.correctedHistoryFeedCount, 3);
+  assert.equal(incident.distinctHistoryObservationCount, 3);
+  for (const [index, expectedDistance] of [60, 45, 30].entries()) {
+    assert.ok(
+      Math.abs(history[index].reportedStopDistance - expectedDistance) < 0.2
+    );
+  }
+  assert.ok(Math.abs(incident.correctedStopDistance - 30) < 0.2);
+  assert.ok(state.recentSpeedTransitions.at(-1).speedMps < 35);
+  assert.equal(outliers.length, 0);
+});
+
+test('does not recover a stop-sequence regression from an unchanged repeated feed', () => {
+  const incidents = [];
+  const builder = createBuilder({
+    onStopSequenceRegression: (incident) => incidents.push(incident)
+  });
+  const timetable = createTimetable();
+  builder.processFeed(feed(vehicleEntity({
+    timestamp: 1000,
+    sequence: 3,
+    stopId: 'C',
+    stopDistance: 0,
+    position: { latitude: 0, longitude: 0.002 }
+  })), timetable);
+
+  const state = builder.vehicleStates.get('vehicle');
+  const baseline = state.lastSample;
+  const rejected = {
+    ...baseline,
+    source: { archiveName: 'archive', feedName: 'rejected.pb' },
+    timestamp: 1010,
+    vehicleTimestamp: 1010,
+    stopIndex: 1,
+    stopId: 'B',
+    stopShapeDistance: 100,
+    stopPosition: { latitude: 0, longitude: 0.001 },
+    feedReportedStopDistance: 0,
+    reportedStopDistance: 371,
+    doorOpen: true,
+    position: { latitude: 0, longitude: 0.001 }
+  };
+  state.stopSequenceRegression = {
+    previous: baseline,
+    firstInvalidSample: rejected,
+    lastInvalidSample: rejected,
+    invalidatedFeedCount: 1
+  };
+  const repeated = {
+    ...rejected,
+    source: { archiveName: 'archive', feedName: 'repeated.pb' },
+    reportedStopDistance: 0
+  };
+
+  const recovered = builder.recoverStopSequenceRegression(state, repeated, {
+    gpsDistanceToStopMeters: 48,
+    differenceMeters: 48,
+    toleranceMeters: 50,
+    validates: true
+  });
+
+  assert.equal(recovered, false);
+  assert.equal(state.stopSequenceRegression.lastInvalidSample, rejected);
+  assert.equal(state.lastSample, baseline);
+  assert.equal(incidents.length, 0);
 });
 
 test('leaves nonzero door-open stop_distance values unchanged', () => {
